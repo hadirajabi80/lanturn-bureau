@@ -690,6 +690,7 @@ function selectClues(
   const act = new Uint8Array(prob.clues.length);
   for (let i = C; i < act.length; i++) act[i] = 1;
   const probeMax = Math.round(lerp(spec.probe[0], spec.probe[1], t));
+  const sampleK = n >= 13 ? 8 : SAMPLE_K;
   const everyone = [...Array(n).keys()];
   const maxFor = (p: number): number => (victimSet.has(p) ? 2 : spec.maxClues);
   const minFor = (p: number): number => (victimSet.has(p) ? 0 : p === liar ? 2 : 1);
@@ -866,7 +867,7 @@ function selectClues(
       // the liar's own facts are only usable under the right hypothesis: lean on everybody else
       const ws = pool.map((i) => weightOf(i) * (candOf(i).owner === liar ? 0.2 : 1));
       const scored: { i: number; s: number }[] = [];
-      for (let k = 0; k < SAMPLE_K; k++) {
+      for (let k = 0; k < sampleK; k++) {
         const j = weightedIndex(rng, ws);
         if (j < 0) break;
         const w = ws[j] as number;
@@ -941,7 +942,8 @@ function selectClues(
     const o = candOf(i).owner;
     if ((counts[o] as number) <= Math.max(1, minFor(o)) && !victimSet.has(o)) continue;
     deactivate(i);
-    if (deduce(prob, act, probeMax).status !== 'solved') activate(i);
+    // propagation alone is cheaper; probing only when it is not enough
+    if (deduce(prob, act, 0).status !== 'solved' && (probeMax < 2 || deduce(prob, act, probeMax).status !== 'solved')) activate(i);
   }
 
   phase("minimise");
@@ -1068,7 +1070,8 @@ function tryGenerate(cs: CaseSpec, attempt: number): Puzzle | null {
   const { tier, variant, t } = cs;
   const spec = TIER_SPEC[tier];
   const theme = themeOf(cs.district.themeId);
-  const layout: LayoutStyle = cs.district.layout;
+  // some scenarios are impossible on some small plans (e.g. lockedRoom on a 5×5 ring): late attempts carve organically
+  const layout: LayoutStyle = attempt >= 24 ? 'organic' : cs.district.layout;
 
   const N = cs.size;
   const rows = N, cols = N;
