@@ -1,0 +1,9 @@
+# Manual / local run:  docker compose up -d --build   →  http://<host>:5050
+services:
+  floorplans:
+    build: .
+    image: floorplans:local
+    container_name: floorplans
+    ports:
+      - "5050:80"
+    restart: unless-stopped

@@ -1,0 +1,101 @@
+name: Deploy
+
+# Every push to main/master: test → build a Docker image → push to GHCR → run it on the server on port 5050.
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/floorplans
+  CONTAINER: floorplans
+  HOST_PORT: "5050"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run grid:test
+
+  image:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      tag: ${{ steps.vars.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: vars
+        run: echo "tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:${{ steps.vars.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: image
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: http://167.233.87.63:5050
+    steps:
+      - name: Pull and restart the container on the server
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE: ${{ env.IMAGE }}
+          TAG: ${{ needs.image.outputs.tag }}
+          CONTAINER: ${{ env.CONTAINER }}
+          HOST_PORT: ${{ env.HOST_PORT }}
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          envs: GHCR_USER,GHCR_TOKEN,IMAGE,TAG,CONTAINER,HOST_PORT
+          script_stop: true
+          script: |
+            set -e
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+            docker pull "$IMAGE:$TAG"
+            # Only this app's container is replaced; other containers on the host are untouched.
+            docker rm -f "$CONTAINER" 2>/dev/null || true
+            docker run -d --name "$CONTAINER" --restart unless-stopped \
+              -p "$HOST_PORT:80" "$IMAGE:$TAG"
+            docker logout ghcr.io
+            # keep the last 3 images of this app, prune older ones
+            docker images "$IMAGE" --format '{{.Tag}} {{.ID}}' | grep -v latest | tail -n +4 | awk '{print $2}' | xargs -r docker rmi || true
+            for i in $(seq 1 15); do
+              if wget -qO- "http://127.0.0.1:$HOST_PORT/healthz" >/dev/null 2>&1 || curl -fs "http://127.0.0.1:$HOST_PORT/healthz" >/dev/null 2>&1; then
+                echo "Healthy on port $HOST_PORT"; exit 0
+              fi
+              sleep 2
+            done
+            echo "Container did not become healthy"; docker logs --tail 50 "$CONTAINER"; exit 1
