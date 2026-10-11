@@ -49,6 +49,10 @@ GitHub → Settings → Secrets and variables → Actions → New repository sec
 | `SSH_USER` | the deploy user |
 | `SSH_KEY` | the full content of the private key `floorplans_deploy` |
 | `SSH_PORT` | only if SSH is not on 22 |
+| `SSH_PASSWORD` | optional: use instead of `SSH_KEY` if the server allows password login (then delete `SSH_KEY`) |
+
+`SSH_KEY` must be the **private** key file (no `.pub`), pasted whole, from `-----BEGIN OPENSSH PRIVATE KEY-----`
+to `-----END OPENSSH PRIVATE KEY-----`. The error `ssh: no key found` means the secret holds something else.
 
 The image is pushed to GitHub Container Registry with the workflow's own token; no extra secret is needed.
 
