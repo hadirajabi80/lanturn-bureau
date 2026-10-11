@@ -1,12 +1,14 @@
 /**
- * CRIME FILES — grid-placement logic puzzles.
+ * FLOORPLAN MYSTERIES (Lantern Bureau) — grid-placement logic puzzles.
+ * Design brief: docs/FLOORPLAN-DESIGN.md (v2). Engine rules: docs/GRID-PLAN.md.
  * Shared contract between the generator/solver (engine), the board UI and the screens.
  * Do not change shapes without updating docs/GRID-PLAN.md.
  */
 import type { AvatarSpec } from '../data/types';
 
-export type Tier = 'easy' | 'medium' | 'hard' | 'extreme';
-export const TIERS: Tier[] = ['easy', 'medium', 'hard', 'extreme'];
+/** Internal ids stay easy…extreme; display names are Rookie / Detective / Inspector / Chief / Mastermind (see TIER_INFO in docs). */
+export type Tier = 'easy' | 'medium' | 'hard' | 'extreme' | 'mastermind';
+export const TIERS: Tier[] = ['easy', 'medium', 'hard', 'extreme', 'mastermind'];
 
 export interface Cell { r: number; c: number }
 export const cellKey = (c: Cell) => `${c.r},${c.c}`;
@@ -163,6 +165,69 @@ export interface Puzzle {
   solution: Record<string, Cell>; // personId -> cell (unique)
   killerId: string;
   parSeconds: number;     // for 3-star timing
+  /** v2 rule variant. Absent = 'classic'. */
+  variant?: Variant;
+  /** 'liar' / 'liarDouble': the person whose every sentence is FALSE (always one of the killers). */
+  liarId?: string;
+  /** 'accomplice': the second person (besides the killer) who shares the victim's room. */
+  accompliceId?: string;
+  /** 'poison': the furniture kind the poison was in (killer = the only person beside one of those pieces). */
+  poisonKind?: FurnitureKind;
+  /** 'double' / 'liarDouble': two victims, two killers (each killer is alone with one victim). killerId = killerIds[0]. */
+  killerIds?: string[];
+  victimIds?: string[];
+  /** building layout style used to grow the rooms (see LayoutStyle). */
+  layout?: LayoutStyle;
+  /** skin id used by the board renderer (defaults to the district skin). */
+  skinId?: string;
+}
+
+// ─────────────────────────── v2: variants, layouts, modes ───────────────────────────
+/**
+ * Scenario variants. All keep the core rule: one person per row and per column, N people on an N×N plan.
+ * classic     — the killer is the only other person in the victim's room (room holds exactly 2).
+ * accomplice  — the victim's room holds exactly 3 people: victim, killer, accomplice. The killer is the one
+ *               CLOSER to the victim (Manhattan distance, always distinct); the other is the accomplice. Name both.
+ * lockedRoom  — the victim was alone in a room. The killer is the only person in a room that shares a wall
+ *               (orthogonally adjacent cells) with the victim's room.
+ * poison      — the poison was in the {poisonKind}. The killer is the only person beside (orthogonally) a piece of that kind.
+ *               The victim may be anywhere.
+ * sniper      — the killer is the only person with a clear sight line (row, column or diagonal, not blocked by
+ *               blocking furniture) to the victim. With one person per row/column this is always a diagonal.
+ * liar        — classic + exactly one suspect lies (ALL their sentences are false). The liar is the killer.
+ * double      — two victims, two killers; each victim's room holds exactly that victim and their killer.
+ * liarDouble  — double + one of the two killers is a liar (Mastermind).
+ * accompliceLiar — accomplice + the accomplice lies (Mastermind).
+ */
+export type Variant = 'classic' | 'accomplice' | 'lockedRoom' | 'poison' | 'sniper' | 'liar' | 'double' | 'liarDouble' | 'accompliceLiar';
+
+/** Tier → which variants the generator may pick (index-driven, deterministic). Display names in skins/districts.ts TIER_INFO. */
+export const VARIANTS_BY_TIER: Record<Tier, Variant[]> = {
+  easy: ['classic'],
+  medium: ['classic', 'lockedRoom', 'poison'],
+  hard: ['classic', 'accomplice', 'sniper', 'lockedRoom', 'poison', 'liar'],
+  extreme: ['accomplice', 'liar', 'double', 'sniper', 'poison'],
+  mastermind: ['liarDouble', 'accompliceLiar', 'double', 'liar'],
+};
+
+/** How the generator carves rooms for a building. */
+export type LayoutStyle =
+  | 'organic'    // free region growth (manor)
+  | 'corridor'   // a long hallway room with rooms on both sides (hotel)
+  | 'carriages'  // horizontal bands of 1–2 rows split into compartments (train)
+  | 'wings'      // mirrored left/right wings around a central hall (museum)
+  | 'courtyard'  // a central courtyard ring of rooms (academy)
+  | 'docks'      // irregular piers: a water-edge column of thin rooms (lighthouse & docks)
+  | 'blocks'     // rectangular city blocks separated by alley rooms (neon quarter)
+  | 'rings';     // concentric rings (observatory)
+
+/** Play modes (routing level, not puzzle variants). */
+export type PlayMode = 'case' | 'daily' | 'blitz' | 'gauntlet' | 'weekly' | 'custom' | 'zen';
+
+/** Player cell marks in v2: pencil notes per person + hard X eliminations per person. */
+export interface CellMarks {
+  notes: Record<string, string[]>;   // cellKey -> personIds pencilled in
+  crosses: Record<string, string[]>; // cellKey -> personIds ruled OUT here
 }
 
 // ─────────────────────────── Player state ───────────────────────────
