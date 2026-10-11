@@ -7,7 +7,7 @@ export { THEMES, SEASONS, DAILY_THEMES } from './themes';
 export { CAST } from './people';
 export type { CastMember } from './people';
 export {
-  buildGridCtx, cellIndex, indexCell, rowOf, colOf, manhattan, adjacent, isCorner, isEdge, lineOfSight,
+  buildGridCtx, cellIndex, indexCell, rowOf, colOf, manhattan, adjacent, diagAdjacent, isCorner, isEdge, lineOfSight,
   lineHasBlocker, strictlyBetween,
 } from './geometry';
 export type { GridCtx, GridLike } from './geometry';
@@ -19,7 +19,9 @@ export { clueText, killerRuleText, pronouns, rowLabel, colLabel, numberWord, fur
 export type { TextCtx } from './text';
 export { countSolutions, deduce, search, propagate, makeProblem } from './solver';
 export { killerIndex } from './killer';
-export { checkPlacement, killerFor, candidateCells, isKillerRuleClue, KILLER_RULE_PREDICATE } from './play';
 export {
-  generatePuzzle, generatePuzzleUncached, clearPuzzleCache, puzzleTitle, dailyPuzzle, dailyTier, dayNumber,
+  checkPlacement, killerFor, candidateCells, isKillerRuleClue, killerRulePredicate, KILLER_RULE_PREDICATE,
+} from './play';
+export {
+  generatePuzzle, generatePuzzleUncached, clearPuzzleCache, puzzleTitle, dailyPuzzle, dailyTier, dayNumber, gridSizeFor,
 } from './generator';

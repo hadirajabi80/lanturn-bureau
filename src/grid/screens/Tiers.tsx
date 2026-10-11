@@ -7,7 +7,7 @@ import { TIERS, type Season } from '@/grid/types';
 import { FilesHeader, FilesPage } from '@/grid/components/FilesPage';
 import { IconSquare } from '@/grid/components/IconSquare';
 import { ProgressBar } from '@/grid/components/ProgressBar';
-import { TIER_META } from '@/grid/components/theme';
+import { TIER_META, tierSizeRange } from '@/grid/components/theme';
 
 /** /files/:season — "Choose difficulty". */
 export default function Tiers() {
@@ -23,6 +23,7 @@ export default function Tiers() {
       <div className="flex flex-col gap-3.5">
         {TIERS.map((tier, i) => {
           const meta = TIER_META[tier];
+          const size = tierSizeRange(tier, season.casesPerTier);
           const p = tierProgress(progress, season.id, tier, season.casesPerTier);
           return (
             <motion.div
@@ -39,7 +40,7 @@ export default function Tiers() {
                 <div className="min-w-0 flex-1">
                   <div className="font-display text-xl font-black leading-tight">{meta.label}</div>
                   <div className="mt-0.5 text-[13px] text-[#8a8178]">
-                    {meta.minSize}×{meta.minSize} – {meta.maxSize}×{meta.maxSize} · {meta.people[0]}–{meta.people[1]} suspects
+                    {size.min}×{size.min} – {size.max}×{size.max} · {size.min - 1}–{size.max - 1} suspects
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">

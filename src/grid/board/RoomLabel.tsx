@@ -10,6 +10,8 @@ export interface RoomLabelProps {
   boardH: number;
   /** Inset from the walls in user units. */
   inset: number;
+  /** Dense board: rooms narrower than 2 cells show only the first word of their name. */
+  compact?: boolean;
 }
 
 /** Anchor cell: the left-most cell of the room's bottom-most row. */
@@ -21,10 +23,22 @@ function labelAnchor(room: Room): { r: number; c: number } | null {
   return best;
 }
 
+/** Column span of a room (cells). */
+function roomWidth(room: Room): number {
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const c of room.cells) {
+    lo = Math.min(lo, c.c);
+    hi = Math.max(hi, c.c);
+  }
+  return hi >= lo ? hi - lo + 1 : 0;
+}
+
 /** White rounded name chip sitting at the bottom edge inside a room. */
-function RoomLabelImpl({ room, fontSize, boardW, boardH, inset }: RoomLabelProps): JSX.Element | null {
+function RoomLabelImpl({ room, fontSize, boardW, boardH, inset, compact = false }: RoomLabelProps): JSX.Element | null {
   const textRef = useRef<SVGTextElement>(null);
-  const estimate = room.name.length * fontSize * 0.6;
+  const name = compact && roomWidth(room) < 2 ? (room.name.split(/\s+/)[0] ?? room.name) : room.name;
+  const estimate = name.length * fontSize * 0.6;
   const [measured, setMeasured] = useState<number | null>(null);
 
   useLayoutEffect(() => {
@@ -36,7 +50,7 @@ function RoomLabelImpl({ room, fontSize, boardW, boardH, inset }: RoomLabelProps
     } catch {
       /* not rendered (e.g. display:none) — keep the estimate */
     }
-  }, [room.name, fontSize]);
+  }, [name, fontSize]);
 
   const anchor = labelAnchor(room);
   if (!anchor) return null;
@@ -68,7 +82,7 @@ function RoomLabelImpl({ room, fontSize, boardW, boardH, inset }: RoomLabelProps
         lengthAdjust="spacingAndGlyphs"
         style={{ userSelect: 'none' }}
       >
-        {room.name}
+        {name}
       </text>
     </g>
   );

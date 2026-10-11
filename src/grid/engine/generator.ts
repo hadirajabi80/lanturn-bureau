@@ -2,20 +2,26 @@
  * Procedural case generator (docs/GRID-PLAN.md §3). Pure and deterministic:
  * `generatePuzzle(season, tier, index)` always returns the same case.
  *
- * Pipeline: rooms (seeded region growth) → furniture → solution with a unique
- * killer → candidate clue enumeration → greedy selection driven by a
- * human-style deduction engine (propagation + limited what-if probing) until
- * every person is pinned down → minimisation → top-up for readability →
- * verification with the exhaustive solver. Failed attempts bump a retry
- * counter into the seed.
+ * Board rule: an N×N map holds exactly N people (N−1 suspects + the victim),
+ * exactly one per row and one per column. The killer is the one other person
+ * in the victim's room (the victim's room holds exactly two people).
+ *
+ * Pipeline: rooms (seeded region growth) → furniture (every row/column keeps
+ * ≥ 2 free cells) → solution = random row→column permutation on free cells
+ * with a two-person room for the victim → candidate clue enumeration →
+ * greedy selection driven by a human-style deduction engine (unary filtering
+ * + row/column exclusion + relational arc consistency + shallow what-if in
+ * hard/extreme) until every person is pinned down → minimisation → top-up for
+ * readability → verification with the exhaustive solver. Failed attempts
+ * bump a retry counter into the seed.
  */
 import type { Furniture, FurnitureKind, KillerRule, Person, Predicate, Puzzle, Room, Tier } from '../types';
 import { OCCUPIABLE, TIERS } from '../types';
 import type { GridCtx } from './geometry';
-import { colOf, indexCell, isCorner, isEdge, lineHasBlocker, lineOfSight, manhattan, rowOf, strictlyBetween } from './geometry';
-import { killerIndex, ruleRelation } from './killer';
+import { colOf, diagAdjacent, indexCell, isCorner, isEdge, lineHasBlocker, lineOfSight, manhattan, rowOf } from './geometry';
+import { killerIndex } from './killer';
 import { CAST } from './people';
-import { KILLER_RULE_PREDICATE } from './play';
+import { killerRulePredicate } from './play';
 import type { PuzzleCtx } from './predicates';
 import { makePuzzleCtx } from './predicates';
 import type { Rng } from './rng';
@@ -32,11 +38,8 @@ type PType = Predicate['type'];
 type Cat = 'direct' | 'semi' | 'neg' | 'rel' | 'relNeg' | 'global' | 'or';
 
 interface TierSpec {
-  size: [number, number];
-  suspects: [number, number];
-  rooms: [number, number];
-  furniture: [number, number];
-  rules: KillerRule['type'][];
+  /** furniture pieces per N, at the start / end of the tier ramp */
+  furnPerN: [number, number];
   types: ReadonlySet<PType>;
   /** negated forms (corner/edge false) allowed */
   negatives: boolean;
@@ -45,57 +48,63 @@ interface TierSpec {
   relCap: number;
   /** what-if probing on people with ≤ N cells left, at the start / end of the tier ramp (0 = none) */
   probe: [number, number];
+  /** chance that the top-up gives a person who needed one clue a second, weaker one */
+  extraClue: number;
   par: number;
-  refSuspects: number;
+  refPeople: number;
   weights: Record<Cat, number>;
 }
 
-const EASY_TYPES: PType[] = ['inRoom', 'onFurniture', 'besideFurniture', 'row', 'col', 'corner'];
-const MEDIUM_TYPES: PType[] = [...EASY_TYPES, 'notInRoom', 'sameRoomAs', 'besidePerson', 'edge', 'dirOf'];
-const HARD_TYPES: PType[] = [...MEDIUM_TYPES, 'differentRoomFrom', 'sameRowAs', 'sameColAs', 'directlyDirOf',
-  'aloneInRoom', 'roomCount', 'distance', 'notRow', 'notCol', 'notOnFurniture', 'notBesideFurniture',
-  'notBesidePerson', 'onNoFurniture', 'onAnyFurniture', 'besideAnyFurniture', 'notBesideAnyFurniture'];
-const EXTREME_TYPES: PType[] = [...HARD_TYPES, 'lineOfSight', 'between', 'or', 'roomHasFurniture', 'roomSizeCmp'];
+/**
+ * Types that need two people in the same row or column can never be true
+ * under the one-per-row/column rule, so they are never generated:
+ * sameRowAs, sameColAs, directlyDirOf, between.
+ */
+const EASY_TYPES: PType[] = ['inRoom', 'onFurniture', 'besideFurniture', 'row', 'col', 'corner', 'notOnFurniture',
+  'notBesideFurniture'];
+const MEDIUM_TYPES: PType[] = [...EASY_TYPES, 'notInRoom', 'edge', 'onNoFurniture', 'onAnyFurniture', 'notRow', 'notCol',
+  'besideAnyFurniture', 'notBesideAnyFurniture', 'sameRoomAs', 'dirOf'];
+const HARD_TYPES: PType[] = [...MEDIUM_TYPES, 'differentRoomFrom', 'besidePerson', 'notBesidePerson', 'aloneInRoom',
+  'roomCount', 'distance', 'roomHasFurniture'];
+const EXTREME_TYPES: PType[] = [...HARD_TYPES, 'lineOfSight', 'or', 'roomSizeCmp'];
 
 const TIER_SPEC: Record<Tier, TierSpec> = {
   easy: {
-    size: [4, 5], suspects: [3, 4], rooms: [3, 4], furniture: [4, 6], rules: ['aloneWithVictim'],
-    types: new Set(EASY_TYPES), negatives: false, maxClues: 2, relCap: 0, probe: [0, 0], par: 90, refSuspects: 3.5,
-    weights: { direct: 3, semi: 2, neg: 0, rel: 0, relNeg: 0, global: 0, or: 0 },
+    furnPerN: [1.0, 1.3], types: new Set(EASY_TYPES), negatives: false, maxClues: 2, relCap: 0, probe: [0, 0],
+    extraClue: 0.25, par: 90, refPeople: 4.5,
+    weights: { direct: 3, semi: 2, neg: 0.8, rel: 0, relNeg: 0, global: 0, or: 0 },
   },
   medium: {
-    size: [5, 6], suspects: [4, 5], rooms: [4, 5], furniture: [6, 9], rules: ['aloneWithVictim', 'besideVictim'],
-    types: new Set(MEDIUM_TYPES), negatives: false, maxClues: 2, relCap: 1, probe: [0, 0], par: 180, refSuspects: 4.5,
-    weights: { direct: 2, semi: 1.6, neg: 1.2, rel: 2.2, relNeg: 0, global: 0, or: 0 },
+    furnPerN: [1.2, 1.5], types: new Set(MEDIUM_TYPES), negatives: false, maxClues: 2, relCap: 1, probe: [0, 0],
+    extraClue: 0.35, par: 180, refPeople: 5.5,
+    weights: { direct: 2.2, semi: 1.8, neg: 1.3, rel: 0.6, relNeg: 0, global: 0, or: 0 },
   },
   hard: {
-    size: [6, 7], suspects: [5, 6], rooms: [5, 6], furniture: [8, 12],
-    rules: ['aloneWithVictim', 'besideVictim', 'closest', 'sameRowOrCol'],
-    types: new Set(HARD_TYPES), negatives: true, maxClues: 3, relCap: 2, probe: [3, 4], par: 300, refSuspects: 5.5,
-    weights: { direct: 1, semi: 1.3, neg: 1.5, rel: 2.5, relNeg: 1.6, global: 1.8, or: 0 },
+    furnPerN: [1.4, 1.7], types: new Set(HARD_TYPES), negatives: true, maxClues: 3, relCap: 2, probe: [2, 3],
+    extraClue: 0.5, par: 300, refPeople: 7,
+    weights: { direct: 1.3, semi: 1.4, neg: 1.3, rel: 2, relNeg: 1.1, global: 1.2, or: 0 },
   },
   extreme: {
-    size: [7, 8], suspects: [6, 8], rooms: [6, 8], furniture: [10, 16],
-    rules: ['aloneWithVictim', 'besideVictim', 'closest', 'sameRowOrCol', 'lineOfSight'],
-    types: new Set(EXTREME_TYPES), negatives: true, maxClues: 3, relCap: 3, probe: [4, 5], par: 480, refSuspects: 7,
-    weights: { direct: 0.35, semi: 1, neg: 1.4, rel: 3, relNeg: 2, global: 1.8, or: 1.5 },
+    furnPerN: [1.5, 1.9], types: new Set(EXTREME_TYPES), negatives: true, maxClues: 3, relCap: 2, probe: [3, 4],
+    extraClue: 0.55, par: 480, refPeople: 10,
+    weights: { direct: 0.8, semi: 1.1, neg: 1.2, rel: 2.6, relNeg: 1.5, global: 1.4, or: 0.7 },
   },
 };
 
 /**
  * Per-type flavour multipliers on top of the category weights. Geometric
- * relations (distance, direction) prune very efficiently and would otherwise
- * crowd out the room-based reasoning that gives the game its character.
+ * relations (distance) prune very efficiently and would otherwise crowd out
+ * the room-based reasoning that gives the game its character.
  */
 const TYPE_BOOST: Partial<Record<PType, number>> = {
-  distance: 0.45, directlyDirOf: 0.6, dirOf: 0.75,
-  sameRoomAs: 1.8, differentRoomFrom: 1.7, aloneInRoom: 1.8, roomCount: 1.6, besidePerson: 1.4,
-  lineOfSight: 1.8, between: 1.5, roomHasFurniture: 1.3, roomSizeCmp: 1.3, inRoom: 1.3, notInRoom: 1.3,
+  distance: 0.35, dirOf: 0.9,
+  sameRoomAs: 1.8, differentRoomFrom: 1.3, aloneInRoom: 1.6, roomCount: 1.4, besidePerson: 1.5,
+  lineOfSight: 1.6, roomHasFurniture: 1.2, roomSizeCmp: 1.2, inRoom: 1.3, notInRoom: 1.1,
+  onFurniture: 1.3, besideFurniture: 1.2, notOnFurniture: 0.8, notBesideFurniture: 1.0,
 };
 
-/** Selection: how strongly a clue's deductive gain counts, and how many candidates are trial-propagated per step. */
-const GAIN_EXP = 1.0;
-const SAMPLE_K = 14;
+/** Selection: how many candidates are trial-propagated per step. */
+const SAMPLE_K = 12;
 
 const CAT_ORDER: Record<Cat, number> = { direct: 0, semi: 1, neg: 2, global: 3, rel: 4, relNeg: 5, or: 6 };
 
@@ -116,7 +125,7 @@ function catOf(p: Predicate): Cat {
   }
 }
 
-// ─────────────────────────── Seasons / ramp ───────────────────────────
+// ─────────────────────────── Seasons / sizes / ramp ───────────────────────────
 
 function seasonInfo(seasonId: string, index: number): { themeId: string; casesPerTier: number } {
   if (seasonId === 'daily') return { themeId: DAILY_THEMES[Math.abs(index) % DAILY_THEMES.length] as string, casesPerTier: 40 };
@@ -124,15 +133,43 @@ function seasonInfo(seasonId: string, index: number): { themeId: string; casesPe
   return s ? { themeId: s.themeId, casesPerTier: s.casesPerTier } : { themeId: 'mansion', casesPerTier: 40 };
 }
 
-/** 0 → first case of a tier, 1 → last. Daily cases land somewhere in the middle band. */
+/** Grid size ladder per tier: [last case index (1-based, inclusive), N]. */
+const SIZE_LADDER: Record<Tier, [number, number][]> = {
+  easy: [[20, 4], [40, 5]],
+  medium: [[20, 5], [40, 6]],
+  hard: [[15, 6], [30, 7], [40, 8]],
+  extreme: [[10, 8], [20, 9], [30, 10], [35, 11], [40, 12]],
+};
+
+/**
+ * Board size N (the map is N×N and holds N people) for case `index` (1-based)
+ * of a tier. Cheap — no generation. Indices past 40 use the largest size.
+ */
+export function gridSizeFor(tier: Tier, index: number): number {
+  const ladder = SIZE_LADDER[tier];
+  for (const [upTo, n] of ladder) if (index <= upTo) return n;
+  return (ladder[ladder.length - 1] as [number, number])[1];
+}
+
+/** Daily cases: a stable pseudo index inside the 40-case ramp. */
+const dailyVirtualIndex = (index: number): number => ((Math.abs(index) * 7) % 40) + 1;
+
+function sizeFor(seasonId: string, tier: Tier, index: number): number {
+  if (seasonId === 'daily') {
+    if (tier === 'extreme') return 9 + (hashSeed('daily-size', index) % 4);
+    return gridSizeFor(tier, dailyVirtualIndex(index));
+  }
+  return gridSizeFor(tier, index);
+}
+
+/** 0 → first case of a tier, 1 → last. Daily cases land somewhere along the ramp. */
 function rampT(seasonId: string, index: number): number {
-  if (seasonId === 'daily') return ((Math.abs(index) * 7) % 40) / 39;
+  if (seasonId === 'daily') return (dailyVirtualIndex(index) - 1) / 39;
   const { casesPerTier } = seasonInfo(seasonId, index);
   return Math.max(0, Math.min(1, (index - 1) / Math.max(1, casesPerTier - 1)));
 }
 
 const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
-const lerpInt = (r: [number, number], t: number): number => r[0] + Math.min(r[1] - r[0], Math.floor(t * (r[1] - r[0] + 1)));
 
 // ─────────────────────────── Title ───────────────────────────
 
@@ -219,20 +256,25 @@ function growRooms(rng: Rng, rows: number, cols: number, k: number): Int16Array 
 const TWO_ALWAYS = new Set<FurnitureKind>(['sofa', 'bed', 'bench', 'counter', 'coffin']);
 const TWO_SOMETIMES = new Set<FurnitureKind>(['table', 'desk']);
 
+/**
+ * 1–3 pieces per room from the theme pool. Blocking pieces keep ≥ 2 open
+ * cells in their room and ≥ 2 free cells in every row and column.
+ */
 function placeFurniture(
-  rng: Rng, rows: number, cols: number, owner: Int16Array, k: number, count: number,
-  pool: FurnitureKind[], minFree: number,
+  rng: Rng, rows: number, cols: number, owner: Int16Array, k: number, count: number, pool: FurnitureKind[],
 ): Furniture[] | null {
   const N = rows * cols;
   const occPool = pool.filter((x) => OCCUPIABLE[x]);
   const blkPool = pool.filter((x) => !OCCUPIABLE[x]);
   const roomCells: number[][] = Array.from({ length: k }, () => []);
   for (let c = 0; c < N; c++) (roomCells[owner[c] as number] as number[]).push(c);
-  const maxSame = N >= 49 ? 3 : 2;
+  const maxSame = Math.max(2, Math.ceil(count / 6));
 
   for (let attempt = 0; attempt < 20; attempt++) {
     const kindAt: (FurnitureKind | null)[] = new Array<FurnitureKind | null>(N).fill(null);
     const blocked = new Uint8Array(N);
+    const rowFree = new Array<number>(rows).fill(cols);
+    const colFree = new Array<number>(cols).fill(rows);
     // which room each piece goes to: every room gets one, extras weighted by room size (≤ 3 per room)
     const planned: number[] = new Array<number>(k).fill(0);
     const plan: number[] = [];
@@ -266,10 +308,22 @@ function placeFurniture(
         if (!OCCUPIABLE[kind]) {
           const open = cells.filter((c) => !blocked[c]).length;
           if (open - spot.length < 2) continue;
+          let ok = true;
+          for (const c of spot) {
+            const rr = Math.floor(c / cols), cc = c % cols;
+            const inRow = spot.filter((x) => Math.floor(x / cols) === rr).length;
+            const inCol = spot.filter((x) => x % cols === cc).length;
+            if ((rowFree[rr] as number) - inRow < 2 || (colFree[cc] as number) - inCol < 2) ok = false;
+          }
+          if (!ok) continue;
         }
         for (const c of spot) {
           kindAt[c] = kind;
-          if (!OCCUPIABLE[kind]) blocked[c] = 1;
+          if (!OCCUPIABLE[kind]) {
+            blocked[c] = 1;
+            rowFree[Math.floor(c / cols)] = (rowFree[Math.floor(c / cols)] as number) - 1;
+            colFree[c % cols] = (colFree[c % cols] as number) - 1;
+          }
         }
         const piece: Furniture = { id: `f${furniture.length}`, kind, cells: spot.map((c) => indexCell(cols, c)) };
         if (spot.length === 2) piece.orient = (spot[1] as number) - (spot[0] as number) === 1 ? 'h' : 'v';
@@ -279,9 +333,6 @@ function placeFurniture(
       }
     }
     if (furniture.length < Math.max(k, count - 2)) continue;
-    let free = 0;
-    for (let c = 0; c < N; c++) if (!blocked[c]) free++;
-    if (free < minFree) continue;
     return furniture;
   }
   return null;
@@ -289,35 +340,65 @@ function placeFurniture(
 
 // ─────────────────────────── Solution ───────────────────────────
 
-/** Place everyone so that exactly one suspect (the killer) matches the rule. */
-function placePeople(rng: Rng, g: GridCtx, n: number, victim: number, killer: number, rule: KillerRule['type']): Int16Array | null {
-  const pickCell = (cands: number[]): number => {
-    const onF = cands.filter((c) => g.kindAt[c] !== null);
-    if (onF.length && rng.chance(0.3)) return rng.pick(onF);
-    return rng.pick(cands);
-  };
-  for (let attempt = 0; attempt < 30; attempt++) {
-    const pos = new Int16Array(n).fill(-1);
-    const taken = new Set<number>();
-    const v = pickCell(g.free);
-    pos[victim] = v;
-    taken.add(v);
-    const kc = g.free.filter((c) => !taken.has(c) && (rule === 'closest' ? manhattan(g, c, v) <= 3 : ruleRelation(g, rule, c, v)));
-    if (!kc.length) continue;
-    const kcell = pickCell(kc);
-    pos[killer] = kcell;
-    taken.add(kcell);
-    const dk = manhattan(g, kcell, v);
-    let ok = true;
-    for (let s = 0; s < n && ok; s++) {
-      if (s === victim || s === killer) continue;
-      const cands = g.free.filter((c) => !taken.has(c) && (rule === 'closest' ? manhattan(g, c, v) > dk : !ruleRelation(g, rule, c, v)));
-      if (!cands.length) { ok = false; break; }
-      const c = pickCell(cands);
-      pos[s] = c;
-      taken.add(c);
+/**
+ * A random row → column permutation on free cells (people like to sit on
+ * furniture), returned as one cell per row. null when none is found quickly.
+ */
+function randomPermutation(rng: Rng, g: GridCtx): number[] | null {
+  const N = g.rows;
+  const order = rng.shuffle([...Array(N).keys()]);
+  const cellOfRow = new Array<number>(N).fill(-1);
+  const colUsed = new Uint8Array(g.cols);
+  let nodes = 0;
+  const rec = (k: number): boolean => {
+    if (k === N) return true;
+    if (++nodes > 4000) return false;
+    const r = order[k] as number;
+    const opts: { c: number; key: number }[] = [];
+    for (let c = 0; c < g.cols; c++) {
+      const i = r * g.cols + c;
+      if (colUsed[c] || g.blocked[i]) continue;
+      const kind = g.kindAt[i];
+      opts.push({ c: i, key: rng.next() * (kind && OCCUPIABLE[kind] ? 2.4 : 1) });
     }
-    if (ok && killerIndex(g, { type: rule } as KillerRule, pos, victim) === killer) return pos;
+    opts.sort((a, b) => b.key - a.key);
+    for (const o of opts) {
+      colUsed[o.c % g.cols] = 1;
+      cellOfRow[r] = o.c;
+      if (rec(k + 1)) return true;
+      colUsed[o.c % g.cols] = 0;
+    }
+    cellOfRow[r] = -1;
+    return false;
+  };
+  return rec(0) ? cellOfRow : null;
+}
+
+/**
+ * Place everyone (one per row and column) so that the victim's room holds
+ * exactly two people: the victim and the killer.
+ */
+function placePeople(rng: Rng, g: GridCtx, n: number, victim: number, killer: number): Int16Array | null {
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const cells = randomPermutation(rng, g);
+    if (!cells) continue;
+    const byRoom = new Map<number, number[]>();
+    for (const c of cells) {
+      const R = g.roomOf[c] as number;
+      const list = byRoom.get(R) ?? [];
+      list.push(c);
+      byRoom.set(R, list);
+    }
+    const pairs = [...byRoom.values()].filter((l) => l.length === 2);
+    if (!pairs.length) continue;
+    const pair = rng.shuffle(rng.pick(pairs));
+    const pos = new Int16Array(n).fill(-1);
+    pos[victim] = pair[0] as number;
+    pos[killer] = pair[1] as number;
+    const rest = rng.shuffle(cells.filter((c) => c !== pair[0] && c !== pair[1]));
+    let k = 0;
+    for (let p = 0; p < n; p++) if (pos[p] === -1) pos[p] = rest[k++] as number;
+    if (killerIndex(g, { type: 'aloneWithVictim' }, pos, victim) === killer) return pos;
   }
   return null;
 }
@@ -356,17 +437,8 @@ function clueKey(owner: number, p: Predicate, who: (id: string) => number): stri
   }
 }
 
-/** Relational predicate types that would give away the killer rule outright. */
-const MIRRORS: Record<KillerRule['type'], PType[]> = {
-  aloneWithVictim: ['sameRoomAs', 'differentRoomFrom'],
-  besideVictim: ['besidePerson', 'notBesidePerson'],
-  lineOfSight: ['lineOfSight'],
-  closest: ['distance'],
-  sameRowOrCol: ['sameRowAs', 'sameColAs', 'directlyDirOf'],
-};
-
 function enumerateCandidates(
-  rng: Rng, spec: TierSpec, ctx: PuzzleCtx, sol: Int16Array, victim: number, rule: KillerRule['type'],
+  rng: Rng, spec: TierSpec, ctx: PuzzleCtx, sol: Int16Array, victim: number, killer: number,
 ): Cand[] {
   const g = ctx.grid;
   const n = sol.length;
@@ -378,7 +450,8 @@ function enumerateCandidates(
     if (!allowed(pred.type)) return;
     const others = pred.type === 'between' ? [pred.a, pred.b]
       : 'personId' in pred ? [pred.personId] : [];
-    if (others.includes(ids[victim] as string) && MIRRORS[rule].includes(pred.type)) return;
+    // "X was (not) in the same room as the victim" would name the killer outright
+    if (others.includes(ids[victim] as string) && (pred.type === 'sameRoomAs' || pred.type === 'differentRoomFrom')) return;
     const pair = others.length === 1 ? [owner, who(others[0] as string)].sort((x, y) => x - y).join('|') : null;
     out.push({ owner, pred, cat: catOf(pred), key: clueKey(owner, pred, who), pair });
   };
@@ -418,15 +491,15 @@ function enumerateCandidates(
     if (isCorner(g, c)) add(p, { type: 'corner', value: true });
     if (isEdge(g, c)) add(p, { type: 'edge', value: true });
     g.roomIds.forEach((rid, ri) => { if (ri !== R) add(p, { type: 'notInRoom', roomId: rid }); });
+    for (const r of rng.shuffle([...Array(g.rows).keys()].filter((x) => x !== row)).slice(0, 3)) add(p, { type: 'notRow', index: r });
+    for (const k of rng.shuffle([...Array(g.cols).keys()].filter((x) => x !== col)).slice(0, 3)) add(p, { type: 'notCol', index: k });
+    for (const k of occKinds) if (k !== kind) add(p, { type: 'notOnFurniture', kind: k });
+    for (const k of allKinds) if (!adj.has(k)) add(p, { type: 'notBesideFurniture', kind: k });
+    add(p, kind ? { type: 'onAnyFurniture' } : { type: 'onNoFurniture' });
+    add(p, adj.size ? { type: 'besideAnyFurniture' } : { type: 'notBesideAnyFurniture' });
     if (spec.negatives) {
       if (!isCorner(g, c)) add(p, { type: 'corner', value: false });
       if (!isEdge(g, c)) add(p, { type: 'edge', value: false });
-      for (const r of rng.shuffle([...Array(g.rows).keys()].filter((x) => x !== row)).slice(0, 3)) add(p, { type: 'notRow', index: r });
-      for (const k of rng.shuffle([...Array(g.cols).keys()].filter((x) => x !== col)).slice(0, 3)) add(p, { type: 'notCol', index: k });
-      for (const k of occKinds) if (k !== kind) add(p, { type: 'notOnFurniture', kind: k });
-      for (const k of allKinds) if (!adj.has(k)) add(p, { type: 'notBesideFurniture', kind: k });
-      add(p, kind ? { type: 'onAnyFurniture' } : { type: 'onNoFurniture' });
-      add(p, adj.size ? { type: 'besideAnyFurniture' } : { type: 'notBesideAnyFurniture' });
     }
     const rk = g.roomKinds[R] as Set<FurnitureKind>;
     for (const k of allKinds) {
@@ -437,7 +510,7 @@ function enumerateCandidates(
     if (uniqueMax && roomSizes[R] === maxSize) add(p, { type: 'roomSizeCmp', cmp: 'exactly', n: maxSize });
     if (uniqueMin && roomSizes[R] === minSize) add(p, { type: 'roomSizeCmp', cmp: 'exactly', n: minSize });
 
-    if (isVictim) continue; // the victim only ever gets plain positional clues
+    if (isVictim) continue; // the victim only ever gets plain positional clues (and only as a last resort)
 
     // ── or (extreme): one true atom + one false atom, in random order
     if (allowed('or')) {
@@ -448,58 +521,38 @@ function enumerateCandidates(
       }
     }
 
-    // ── room occupancy
-    let inRoom = 1;
-    for (let q = 0; q < n; q++) if (q !== p && g.roomOf[sol[q] as number] === R) inRoom++;
-    if (inRoom === 1) add(p, { type: 'aloneInRoom' });
-    else {
-      add(p, { type: 'roomCount', cmp: 'exactly', n: inRoom });
-      add(p, rng.chance(0.5) ? { type: 'roomCount', cmp: 'atLeast', n: inRoom } : { type: 'roomCount', cmp: 'atMost', n: inRoom });
+    // ── room occupancy (never for the killer: "one of exactly two" would point straight at them)
+    if (p !== killer) {
+      let inRoom = 1;
+      for (let q = 0; q < n; q++) if (q !== p && g.roomOf[sol[q] as number] === R) inRoom++;
+      if (inRoom === 1) add(p, { type: 'aloneInRoom' });
+      else {
+        add(p, { type: 'roomCount', cmp: 'exactly', n: inRoom });
+        add(p, rng.chance(0.5) ? { type: 'roomCount', cmp: 'atLeast', n: inRoom } : { type: 'roomCount', cmp: 'atMost', n: inRoom });
+      }
     }
 
-    // ── relational
+    // ── relational (rows and columns always differ between two people)
     for (let q = 0; q < n; q++) {
       if (q === p) continue;
       const d = sol[q] as number;
       const X = ids[q] as string;
       if (g.roomOf[d] === R) add(p, { type: 'sameRoomAs', personId: X });
       else add(p, { type: 'differentRoomFrom', personId: X });
-      const dist = manhattan(g, c, d);
-      if (dist === 1) add(p, { type: 'besidePerson', personId: X });
-      else if (rng.chance(0.5)) add(p, { type: 'notBesidePerson', personId: X });
+      if (diagAdjacent(g, c, d)) add(p, { type: 'besidePerson', personId: X });
+      else if (manhattan(g, c, d) <= 4 && rng.chance(0.5)) add(p, { type: 'notBesidePerson', personId: X });
       const qr = rowOf(g, d), qc = colOf(g, d);
-      if (qr === row) add(p, { type: 'sameRowAs', personId: X });
-      if (qc === col) add(p, { type: 'sameColAs', personId: X });
-      if (row !== qr) {
-        const dir = row < qr ? 'north' : 'south';
-        if (qc === col) add(p, { type: 'directlyDirOf', personId: X, dir });
-        else add(p, { type: 'dirOf', personId: X, dir });
-      }
-      if (col !== qc) {
-        const dir = col < qc ? 'west' : 'east';
-        if (qr === row) add(p, { type: 'directlyDirOf', personId: X, dir });
-        else add(p, { type: 'dirOf', personId: X, dir });
-      }
+      add(p, { type: 'dirOf', personId: X, dir: row < qr ? 'north' : 'south' });
+      add(p, { type: 'dirOf', personId: X, dir: col < qc ? 'west' : 'east' });
       // distances stay small: "exactly eleven steps" is a disguised corner pin, not a deduction
-      if (dist >= 2) {
-        if (dist <= 5) add(p, { type: 'distance', personId: X, cmp: 'exactly', n: dist });
-        if (rng.chance(0.5)) {
-          if (dist <= 4) add(p, { type: 'distance', personId: X, cmp: 'atMost', n: dist + rng.int(2) });
-        } else if (dist >= 3) add(p, { type: 'distance', personId: X, cmp: 'atLeast', n: Math.min(5, dist - rng.int(2)) });
-      }
-      if ((qr === row || qc === col) && lineHasBlocker(g, c, d)) {
+      const dist = manhattan(g, c, d);
+      if (dist <= 4) add(p, { type: 'distance', personId: X, cmp: 'exactly', n: dist });
+      if (rng.chance(0.5)) {
+        if (dist <= 4) add(p, { type: 'distance', personId: X, cmp: 'atMost', n: dist + rng.int(2) });
+      } else if (dist >= 3) add(p, { type: 'distance', personId: X, cmp: 'atLeast', n: Math.min(5, dist - rng.int(2)) });
+      // sight lines between people run along diagonals; only interesting when furniture could cut them
+      if (Math.abs(row - qr) === Math.abs(col - qc) && Math.abs(row - qr) >= 2 && lineHasBlocker(g, c, d)) {
         add(p, { type: 'lineOfSight', personId: X, value: lineOfSight(g, c, d) });
-      }
-    }
-    // ── between
-    if (allowed('between')) {
-      for (let a = 0; a < n; a++) {
-        for (let b = a + 1; b < n; b++) {
-          if (a === p || b === p) continue;
-          if (strictlyBetween(g, c, sol[a] as number, sol[b] as number)) {
-            add(p, { type: 'between', a: ids[a] as string, b: ids[b] as string });
-          }
-        }
       }
     }
   }
@@ -511,14 +564,17 @@ function enumerateCandidates(
 interface Selection { owner: number; pred: Predicate; cat: Cat }
 
 function selectClues(
-  rng: Rng, tier: Tier, t: number, spec: TierSpec, ctx: PuzzleCtx, sol: Int16Array, victim: number,
-  rule: KillerRule['type'],
+  rng: Rng, tier: Tier, t: number, spec: TierSpec, ctx: PuzzleCtx, sol: Int16Array, victim: number, killer: number,
 ): Selection[] | null {
   const g = ctx.grid;
   const n = sol.length;
-  const cands = enumerateCandidates(rng, spec, ctx, sol, victim, rule);
-  const prob = makeProblem(ctx, cands.map((c) => ({ owner: c.owner, pred: c.pred })));
+  const cands = enumerateCandidates(rng, spec, ctx, sol, victim, killer);
   const C = cands.length;
+  // index C: the victim's killer-rule sentence ("alone with the killer") — always active
+  const prob = makeProblem(ctx, [
+    ...cands.map((c) => ({ owner: c.owner, pred: c.pred })),
+    { owner: victim, pred: killerRulePredicate({ type: 'aloneWithVictim' }) },
+  ]);
   const clueOf = (i: number) => prob.clues[i] as (typeof prob.clues)[number];
   const candOf = (i: number): Cand => cands[i] as Cand;
 
@@ -529,7 +585,8 @@ function selectClues(
     if (m && g.free.every((x) => m[x] === 1)) dead[i] = 1;
   }
 
-  const act = new Uint8Array(C);
+  const act = new Uint8Array(C + 1);
+  act[C] = 1;
   const probeMax = Math.round(lerp(spec.probe[0], spec.probe[1], t));
   const everyone = [...Array(n).keys()];
   const maxFor = (p: number): number => (p === victim ? 2 : spec.maxClues);
@@ -538,7 +595,6 @@ function selectClues(
   const usedKeys = new Set<string>();
   const pairUse = new Map<string, number>();
   const catCount: Record<Cat, number> = { direct: 0, semi: 0, neg: 0, rel: 0, relNeg: 0, global: 0, or: 0 };
-  let betweenCount = 0;
   const rowColCount = new Int32Array(n);
   const orOwners = new Set<number>();
   const isRowCol = (i: number): boolean => candOf(i).pred.type === 'row' || candOf(i).pred.type === 'col';
@@ -581,7 +637,6 @@ function selectClues(
     if (c.cat === 'or' && (catCount.or >= 2 || orOwners.has(c.owner))) return false;
     // "row 2" + "column 3" is a bare coordinate, not a deduction
     if (isRowCol(i) && (rowColCount[c.owner] as number) > 0) return false;
-    if (c.pred.type === 'between' && betweenCount >= 2) return false;
     if (W[c.cat] <= 0) return false;
     return addsInfo(i);
   };
@@ -589,7 +644,7 @@ function selectClues(
   /**
    * Is a two-person clue already implied by what the text says about that pair
    * (both people's own unary clues + every active clue about just the two of
-   * them)? Used so top-up clues never restate something obvious.
+   * them + the row/column rule)? Used so top-up clues never restate something obvious.
    */
   const impliedLocally = (i: number): boolean => {
     const cl = clueOf(i);
@@ -606,7 +661,7 @@ function selectClues(
     for (const ca of g.free) {
       if (!ua[ca]) continue;
       for (const cb of g.free) {
-        if (!ub[cb] || cb === ca) continue;
+        if (!ub[cb] || rowOf(g, ca) === rowOf(g, cb) || colOf(g, ca) === colOf(g, cb)) continue;
         pos[a] = ca; pos[b] = cb;
         if (pairClues.every((j) => clueOf(j).f(pos) === 1) && cl.f(pos) !== 1) return false;
       }
@@ -623,8 +678,8 @@ function selectClues(
   const weightOf = (i: number): number => {
     const c = candOf(i);
     let w = (W[c.cat] * (TYPE_BOOST[c.pred.type] ?? 1)) / Math.sqrt(groupSize.get(groupOf(i)) ?? 1);
-    if (c.cat === 'direct' && tier !== 'easy') w *= 1 - 0.5 * t;
-    if (c.cat === 'direct' && tier === 'extreme' && catCount.direct >= directCap) w *= 0.08;
+    if (c.cat === 'direct' && tier !== 'easy') w *= 1 - 0.4 * t;
+    if (c.cat === 'direct' && tier === 'extreme' && catCount.direct >= directCap) w *= 0.15;
     if (c.pair && pairUse.get(c.pair)) w *= 0.3;
     return w;
   };
@@ -649,7 +704,6 @@ function selectClues(
     usedKeys.add(c.key);
     if (c.pair) pairUse.set(c.pair, (pairUse.get(c.pair) ?? 0) + 1);
     catCount[c.cat]++;
-    if (c.pred.type === 'between') betweenCount++;
     if (isRowCol(i)) rowColCount[c.owner] = (rowColCount[c.owner] as number) + 1;
     if (c.cat === 'or') orOwners.add(c.owner);
   };
@@ -660,7 +714,6 @@ function selectClues(
     if (!clueOf(i).unary) relCounts[c.owner] = (relCounts[c.owner] as number) - 1;
     if (c.pair) pairUse.set(c.pair, (pairUse.get(c.pair) ?? 1) - 1);
     catCount[c.cat]--;
-    if (c.pred.type === 'between') betweenCount--;
     if (isRowCol(i)) rowColCount[c.owner] = (rowColCount[c.owner] as number) - 1;
     if (c.cat === 'or') orOwners.delete(c.owner);
   };
@@ -669,7 +722,7 @@ function selectClues(
   let D = initialDomains(prob, act);
   if (!propagate(prob, act, D)) return null;
   let repairs = 0;
-  for (let iter = 0; iter < 160 && !allSingle(D); iter++) {
+  for (let iter = 0; iter < 8 * n + 40 && !allSingle(D); iter++) {
     const base = entropy(D);
     const usefulNow = (i: number): boolean => {
       const cl = clueOf(i);
@@ -702,7 +755,7 @@ function selectClues(
         const o = candOf(i).owner;
         const lastSlot = (counts[o] as number) + 1 >= maxFor(o);
         const pinned = (Dc[o] as number[]).length === 1;
-        scored.push({ i, s: w * Math.pow(gain, GAIN_EXP) * (lastSlot && !pinned ? 0.03 : 1) });
+        scored.push({ i, s: w * gain * (lastSlot && !pinned ? 0.03 : 1) });
       }
       if (!scored.length) return -1;
       return (scored[weightedIndex(rng, scored.map((x) => x.s))] as { i: number }).i;
@@ -746,9 +799,10 @@ function selectClues(
   }
   if (!allSingle(D)) return null;
 
-  // ── 2. minimise: drop every clue the deduction no longer needs.
+  // ── 2. minimise: drop every clue the deduction no longer needs (victim clues first).
   // Harder tiers try to drop the direct clues first so the relational ones carry the case.
   const removalRank = (i: number): number => {
+    if (candOf(i).owner === victim) return -1;
     if (tier === 'easy' || tier === 'medium') return 0;
     const cat = candOf(i).cat;
     return cat === 'direct' ? 0 : cat === 'semi' ? 1 : cat === 'neg' ? 2 : 3;
@@ -764,21 +818,26 @@ function selectClues(
     if (deduce(prob, act, probeMax).status !== 'solved') activate(i);
   }
 
-  // ── 3. top-up: every suspect gets ≥ 1 clue; hard/extreme often get a second, weaker one.
+  // ── 3. top-up: every suspect gets ≥ 1 clue; some get a second, weaker one.
   rebuildUDom();
   for (let p = 0; p < n; p++) {
     if (p === victim) continue;
-    const hardish = tier === 'hard' || tier === 'extreme';
     const target = counts[p] === 0 ? 1
-      : hardish && counts[p] === 1 && rng.chance(tier === 'extreme' ? 0.55 : 0.5) ? 2 : (counts[p] as number);
+      : counts[p] === 1 && rng.chance(spec.extraClue) ? 2 : (counts[p] as number);
     while ((counts[p] as number) < target) {
       const pool: number[] = [];
-      for (let i = 0; i < C; i++) if (candOf(i).owner === p && baseEligible(i, false) && !impliedLocally(i)) pool.push(i);
-      const j = weightedIndex(rng, pool.map((i) => weightOf(i) * (candOf(i).cat === 'direct' ? 0.3 : 1)));
-      if (j < 0) break;
-      const i = pool[j] as number;
-      activate(i);
-      const cl = clueOf(i);
+      for (let i = 0; i < C; i++) if (candOf(i).owner === p && baseEligible(i, false)) pool.push(i);
+      const ws = pool.map((i) => weightOf(i) * (candOf(i).cat === 'direct' ? 0.3 : 1));
+      let picked = -1;
+      for (let tries = 0; tries < 8 && picked < 0; tries++) {
+        const j = weightedIndex(rng, ws);
+        if (j < 0) break;
+        ws[j] = 0;
+        if (!impliedLocally(pool[j] as number)) picked = pool[j] as number;
+      }
+      if (picked < 0) break;
+      activate(picked);
+      const cl = clueOf(picked);
       if (cl.mask) {
         const u = uDom[p] as Uint8Array, m = cl.mask;
         for (let x = 0; x < g.size; x++) if (!m[x]) u[x] = 0;
@@ -808,12 +867,13 @@ function tryGenerate(seasonId: string, tier: Tier, index: number, attempt: numbe
   const { themeId } = seasonInfo(seasonId, index);
   const theme = THEMES[themeId] ?? (THEMES.mansion as NonNullable<(typeof THEMES)['mansion']>);
 
-  const size = t < 0.45 ? spec.size[0] : spec.size[1];
-  const rows = size, cols = size;
-  const nSuspects = lerpInt(spec.suspects, t);
-  const nRooms = Math.min(theme.palette.length, lerpInt(spec.rooms, t));
-  const nFurn = Math.min(spec.furniture[1], lerpInt(spec.furniture, t) + rng.int(2));
-  const nPeople = nSuspects + 1;
+  const N = sizeFor(seasonId, tier, index);
+  const rows = N, cols = N;
+  const nPeople = N;
+  const nSuspects = N - 1;
+  const roomCap = Math.min(theme.palette.length, theme.roomNames.length, Math.floor((N * N) / 4));
+  const nRooms = Math.max(3, Math.min(roomCap, N - 1 + rng.int(3)));
+  const nFurn = Math.round(N * lerp(spec.furnPerN[0], spec.furnPerN[1], t)) + rng.int(2);
 
   // rooms
   const owner = growRooms(rng, rows, cols, nRooms);
@@ -828,7 +888,7 @@ function tryGenerate(seasonId: string, tier: Tier, index: number, attempt: numbe
   }
 
   // furniture
-  const furniture = placeFurniture(rng, rows, cols, owner, nRooms, nFurn, theme.furniture, nPeople + 3);
+  const furniture = placeFurniture(rng, rows, cols, owner, nRooms, nFurn, theme.furniture);
   if (!furniture) return null;
 
   // people (victim listed last)
@@ -839,29 +899,33 @@ function tryGenerate(seasonId: string, tier: Tier, index: number, attempt: numbe
   }));
   const draft = { rows, cols, rooms, furniture, people };
   const ctx = makePuzzleCtx(draft);
-  const g = ctx.grid;
-  for (const cells of g.roomCells) if (cells.filter((c) => !g.blocked[c]).length < 1) return null;
 
   // solution + killer
-  const ruleType = rng.pick(spec.rules);
   const killer = rng.int(nSuspects);
-  const sol = placePeople(rng, g, nPeople, victim, killer, ruleType);
+  const sol = placePeople(rng, ctx.grid, nPeople, victim, killer);
   if (!sol) return null;
-  const killerRule = { type: ruleType } as KillerRule;
+  const killerRule: KillerRule = { type: 'aloneWithVictim' };
 
   // clues
+  // the victim is pinned through everybody else's clues; a victim clue of their own is a last resort
   let sel: Selection[] | null = null;
-  for (let s = 0; s < 3 && !sel; s++) sel = selectClues(rng, tier, t, spec, ctx, sol, victim, ruleType);
+  for (let s = 0; s < 4; s++) {
+    const cand = selectClues(rng, tier, t, spec, ctx, sol, victim, killer);
+    if (!cand) { if (s >= 2 && !sel) break; continue; }
+    if (!cand.some((x) => x.owner === victim)) { sel = cand; break; }
+    sel ??= cand;
+  }
   if (!sel) return null;
+  const finalSel = sel;
 
   const title = puzzleTitle(seasonId, tier, index);
   const textCtx = { rows, cols, rooms, people, seed };
   const clues: Puzzle['clues'] = [];
   people.forEach((person, p) => {
     if (person.isVictim) {
-      clues.push({ personId: person.id, text: killerRuleText(killerRule, person), predicate: KILLER_RULE_PREDICATE });
+      clues.push({ personId: person.id, text: killerRuleText(killerRule, person), predicate: killerRulePredicate(killerRule) });
     }
-    sel.filter((s) => s.owner === p)
+    finalSel.filter((s) => s.owner === p)
       .sort((a, b) => CAT_ORDER[a.cat] - CAT_ORDER[b.cat])
       .forEach((s, k) => clues.push({ personId: person.id, text: clueText(s.pred, person, textCtx, person.isVictim ? k : undefined), predicate: s.pred }));
   });
@@ -886,7 +950,7 @@ function tryGenerate(seasonId: string, tier: Tier, index: number, attempt: numbe
     killerRule,
     solution,
     killerId: (people[killer] as Person).id,
-    parSeconds: Math.max(30, Math.round((spec.par * nSuspects) / spec.refSuspects / 5) * 5),
+    parSeconds: Math.max(30, Math.round((spec.par * nPeople) / spec.refPeople / 5) * 5),
   };
 }
 

@@ -172,10 +172,19 @@ function CaseView({ puzzle, season, tier, daily, today }: CaseViewProps) {
       case 'reject': {
         if (tool === 'erase') break;
         if (!before) warn('Pick someone from the suspects below first.');
-        else if (isBlocked(puzzle, cell)) warn('That spot is blocked by furniture.');
-        else if (personAt(placements, cell)) warn('Someone is already standing there.');
+        else if (isBlocked(puzzle, cell)) {
+          setShake(true);
+          warn('That spot is blocked by furniture.');
+        } else if (personAt(placements, cell)) {
+          setShake(true);
+          warn('Someone is already standing there.');
+        }
         break;
       }
+      case 'reject-line':
+        setShake(true);
+        warn('One person per row and column');
+        break;
       default:
         break;
     }

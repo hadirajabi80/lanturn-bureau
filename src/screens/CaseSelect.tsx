@@ -5,7 +5,7 @@ import clsx from 'clsx';
 import { Award, Settings, Trophy } from 'lucide-react';
 import { CASES, TIERS, casesOfTier } from '@/data';
 import type { Difficulty } from '@/data/types';
-import { isUnlockedIn, tierBadgesIn, useGame } from '@/engine/store';
+import { tierBadgesIn, useGame } from '@/engine/store';
 import { CaseCard } from '@/components/game/CaseCard';
 import { SettingsModal } from '@/components/game/SettingsModal';
 import { IconButton } from '@/components/ui/IconButton';
@@ -47,7 +47,7 @@ export default function CaseSelect() {
           <div className="font-mono text-[11px] uppercase tracking-[0.35em] text-brass/80">Lantern Bureau · Open files</div>
           <h1 className="mt-2 font-display text-4xl font-black sm:text-5xl">The desk of the Rookie</h1>
           <p className="mt-2 max-w-xl text-paper/60">
-            Twenty files, filed in order. Otto doesn't hand you the next one until you've closed the last.
+            Twenty files, all open on the desk. Take them in order or pick the one that calls to you.
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -108,7 +108,6 @@ export default function CaseSelect() {
               <div className="grid grid-cols-1 gap-5 min-[480px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                 {list.map((c) => {
                   const i = cardIndex++;
-                  const unlocked = isUnlockedIn(progress, c.id);
                   const s = sessions[c.id];
                   return (
                     <motion.div
@@ -120,7 +119,7 @@ export default function CaseSelect() {
                       <CaseCard
                         caseFile={c}
                         progress={progress[c.id]}
-                        unlocked={unlocked}
+                        unlocked
                         inProgress={Boolean(s && s.phase !== 'intro' && s.phase !== 'solved')}
                         onOpen={() => navigate(`/case/${c.id}`)}
                       />

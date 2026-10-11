@@ -1,15 +1,25 @@
 /**
  * Constraint machinery for Crime Files.
  *
- *  - `propagate`  : sound domain filtering (arc consistency over relational
- *                   clues, all-different, room-occupancy reasoning). It never
- *                   removes a cell that belongs to a real solution.
+ * The board is N×N with exactly N people and the always-on rule "exactly one
+ * person per row and per column" — people → rows and people → columns are
+ * both permutations. Everything below exploits that.
+ *
+ *  - `propagate`  : sound domain filtering — row/column exclusion (a person
+ *                   confined to one row/column takes it away from everybody
+ *                   else; a row/column only one person can reach must be
+ *                   theirs), arc consistency over relational clues, and
+ *                   room-occupancy reasoning. It never removes a cell that
+ *                   belongs to a real solution.
  *  - `deduce`     : propagation + optional "what-if" probing on people with
  *                   few remaining cells. This models what a human can do and
  *                   is what the generator uses to certify a puzzle is
  *                   *deducible*, not merely unique.
- *  - `search`     : exhaustive backtracking (forward checking, MRV ordering)
- *                   used to count solutions — the ground truth for uniqueness.
+ *  - `search`     : exhaustive backtracking over people (unary candidate
+ *                   filtering, row/column exclusion, relational clues checked
+ *                   once their people are placed, MRV ordering, row/column
+ *                   coverage pruning) used to count solutions — the ground
+ *                   truth for uniqueness.
  */
 import type { Cell, Clue, Predicate, Puzzle } from '../types';
 import { indexCell } from './geometry';
@@ -33,6 +43,12 @@ export interface Problem {
   ctx: PuzzleCtx;
   n: number;
   clues: CClue[];
+  /** cell → row / column */
+  rowAt: Int8Array;
+  colAt: Int8Array;
+  /** every row (resp. column) must hold somebody: n === rows (resp. cols) */
+  fullRows: boolean;
+  fullCols: boolean;
 }
 
 /** Domains: for each person the sorted list of still-possible cells. */
@@ -60,7 +76,14 @@ export function compileClue(ctx: PuzzleCtx, owner: number, pred: Predicate): CCl
 }
 
 export function makeProblem(ctx: PuzzleCtx, list: { owner: number; pred: Predicate }[]): Problem {
-  return { ctx, n: ctx.personIds.length, clues: list.map((x) => compileClue(ctx, x.owner, x.pred)) };
+  const g = ctx.grid;
+  const n = ctx.personIds.length;
+  const rowAt = new Int8Array(g.size), colAt = new Int8Array(g.size);
+  for (let c = 0; c < g.size; c++) { rowAt[c] = Math.floor(c / g.cols); colAt[c] = c % g.cols; }
+  return {
+    ctx, n, clues: list.map((x) => compileClue(ctx, x.owner, x.pred)), rowAt, colAt,
+    fullRows: n === g.rows, fullCols: n === g.cols,
+  };
 }
 
 /** Free cells filtered by every active unary clue. */
@@ -83,22 +106,74 @@ export const allSingle = (D: Domains): boolean => D.every((d) => d.length === 1)
 const TERNARY_LIMIT = 900;
 
 /**
+ * Row/column exclusion to a fixpoint (the "one per row, one per column"
+ * rule). -1 contradiction, 0 unchanged, 1 changed.
+ */
+function lineExclusion(prob: Problem, D: Domains, setDom: (q: number, list: number[]) => void): number {
+  const n = prob.n;
+  let changed = 0;
+  const mask = new Int32Array(n);
+  for (let axisNo = 0; axisNo < 2; axisNo++) {
+    const axis = axisNo === 0 ? prob.rowAt : prob.colAt;
+    const full = axisNo === 0 ? prob.fullRows : prob.fullCols;
+    const L = axisNo === 0 ? prob.ctx.grid.rows : prob.ctx.grid.cols;
+    let again = true;
+    while (again) {
+      again = false;
+      for (let p = 0; p < n; p++) {
+        let m = 0;
+        for (const c of D[p] as number[]) m |= 1 << (axis[c] as number);
+        if (m === 0) return -1;
+        mask[p] = m;
+      }
+      // a person confined to one line owns it
+      for (let p = 0; p < n; p++) {
+        const m = mask[p] as number;
+        if ((m & (m - 1)) !== 0) continue;
+        for (let q = 0; q < n; q++) {
+          if (q === p || ((mask[q] as number) & m) === 0) continue;
+          const nd = (D[q] as number[]).filter((c) => ((1 << (axis[c] as number)) & m) === 0);
+          if (!nd.length) return -1;
+          setDom(q, nd);
+          mask[q] = (mask[q] as number) & ~m;
+          changed = 1;
+          again = true;
+        }
+      }
+      // a line only one person can reach is theirs
+      if (full) {
+        for (let l = 0; l < L; l++) {
+          const bit = 1 << l;
+          let who = -1, cnt = 0;
+          for (let p = 0; p < n; p++) if ((mask[p] as number) & bit) { cnt++; who = p; }
+          if (cnt === 0) return -1;
+          if (cnt === 1 && mask[who] !== bit) {
+            setDom(who, (D[who] as number[]).filter((c) => axis[c] === l));
+            mask[who] = bit;
+            changed = 1;
+            again = true;
+          }
+        }
+      }
+    }
+  }
+  return changed;
+}
+
+/**
  * Bring D to a propagation fixpoint for the active clues. Returns false on
  * contradiction (some domain emptied). `dirty`: when D is already a fixpoint
  * for the active set except for changes to these people (or a newly added
  * clue touching them), only the affected clues are revisited.
  */
 export function propagate(prob: Problem, act: Uint8Array, D: Domains, dirty?: number[]): boolean {
-  const { n, clues } = prob;
+  const { n, clues, rowAt, colAt } = prob;
   const g = prob.ctx.grid;
   const pos = new Int16Array(n).fill(-1);
   let stamp = 1;
   const changedAt = new Int32Array(n);
-  const singleDone = new Uint8Array(n);
-  if (dirty) {
-    for (const p of dirty) changedAt[p] = 1;
-    for (let p = 0; p < n; p++) if (changedAt[p] === 0 && (D[p] as number[]).length === 1) singleDone[p] = 1;
-  } else changedAt.fill(1);
+  if (dirty) for (const p of dirty) changedAt[p] = 1;
+  else changedAt.fill(1);
   const seenAt = new Int32Array(clues.length);
 
   const setDom = (q: number, list: number[]): void => {
@@ -106,13 +181,16 @@ export function propagate(prob: Problem, act: Uint8Array, D: Domains, dirty?: nu
     changedAt[q] = ++stamp;
   };
 
-  // ── support search: is there an assignment of `rest` (distinct cells) making f true?
+  // ── support search: is there an assignment of `rest` (cells in distinct rows and columns) making f true?
   const supported = (cl: CClue, rest: number[], k: number): boolean => {
     if (k === rest.length) return cl.f(pos) === 1;
     const q = rest[k] as number;
     for (const c of D[q] as number[]) {
       let clash = false;
-      for (let j = 0; j < pos.length; j++) if (pos[j] === c && j !== q) { clash = true; break; }
+      for (let j = 0; j < pos.length; j++) {
+        const pj = pos[j] as number;
+        if (pj >= 0 && j !== q && (rowAt[pj] === rowAt[c] || colAt[pj] === colAt[c])) { clash = true; break; }
+      }
       if (clash) continue;
       pos[q] = c;
       const ok = supported(cl, rest, k + 1);
@@ -230,25 +308,8 @@ export function propagate(prob: Problem, act: Uint8Array, D: Domains, dirty?: nu
   let progress = true;
   while (progress) {
     progress = false;
-    // all-different: a person pinned to a cell takes it away from everyone else
-    for (let p = 0; p < n; p++) {
-      const d = D[p] as number[];
-      if (d.length === 0) return false;
-      if (d.length === 1 && !singleDone[p]) {
-        singleDone[p] = 1;
-        const c = d[0] as number;
-        for (let q = 0; q < n; q++) {
-          if (q === p) continue;
-          const dq = D[q] as number[];
-          if (dq.includes(c)) {
-            const nd = dq.filter((x) => x !== c);
-            if (nd.length === 0) return false;
-            setDom(q, nd);
-            progress = true;
-          }
-        }
-      }
-    }
+    const le = lineExclusion(prob, D, setDom);
+    if (le < 0) return false;
     for (let ci = 0; ci < clues.length; ci++) {
       if (!act[ci]) continue;
       const cl = clues[ci] as CClue;
@@ -302,7 +363,7 @@ export function probe(prob: Problem, act: Uint8Array, D: Domains, probeMax: numb
 
 export type DeduceStatus = 'solved' | 'stuck' | 'contradiction';
 
-/** From scratch: unary filtering → propagation → probing. */
+/** From scratch: unary filtering → propagation (incl. row/column exclusion) → probing. */
 export function deduce(prob: Problem, act: Uint8Array, probeMax: number): { status: DeduceStatus; D: Domains } {
   const D = initialDomains(prob, act);
   if (!propagate(prob, act, D)) return { status: 'contradiction', D };
@@ -311,17 +372,18 @@ export function deduce(prob: Problem, act: Uint8Array, probeMax: number): { stat
 }
 
 /**
- * Exhaustive backtracking. Returns up to `limit` solutions as position arrays
- * (person index → cell index).
+ * Exhaustive backtracking over people. Returns up to `limit` solutions as
+ * position arrays (person index → cell index).
  */
 export function search(prob: Problem, act: Uint8Array, limit: number): Int16Array[] {
-  const { n, clues } = prob;
+  const { n, clues, rowAt, colAt } = prob;
+  const g = prob.ctx.grid;
   const D = initialDomains(prob, act);
   const results: Int16Array[] = [];
   if (!propagate(prob, act, D)) return results;
-  const size = prob.ctx.grid.size;
+  const allRows = (1 << g.rows) - 1, allCols = (1 << g.cols) - 1;
 
-  // clues to check whenever person p is (tentatively) placed
+  // non-unary clues to check whenever person p is (tentatively) placed
   const byPerson: number[][] = Array.from({ length: n }, () => []);
   const nonUnary: number[] = [];
   clues.forEach((cl, ci) => {
@@ -332,11 +394,13 @@ export function search(prob: Problem, act: Uint8Array, limit: number): Int16Arra
   });
 
   const pos = new Int16Array(n).fill(-1);
-  const occ = new Uint8Array(size);
+  let rowUsed = 0, colUsed = 0;
 
   const consistent = (p: number, c: number): boolean => {
+    const list = byPerson[p] as number[];
+    if (!list.length) return true;
     pos[p] = c;
-    for (const ci of byPerson[p] as number[]) {
+    for (const ci of list) {
       if ((clues[ci] as CClue).f(pos) === 0) { pos[p] = -1; return false; }
     }
     pos[p] = -1;
@@ -349,22 +413,35 @@ export function search(prob: Problem, act: Uint8Array, limit: number): Int16Arra
       results.push(pos.slice());
       return results.length >= limit;
     }
-    // most-constrained person first (forward checking)
+    // forward check every unplaced person; most-constrained first
     let best = -1;
     let bestList: number[] = [];
+    let rowCover = rowUsed, colCover = colUsed;
     for (let p = 0; p < n; p++) {
       if (pos[p] !== -1) continue;
       const list: number[] = [];
-      for (const c of D[p] as number[]) if (!occ[c] && consistent(p, c)) list.push(c);
+      for (const c of D[p] as number[]) {
+        const rb = 1 << (rowAt[c] as number), cb = 1 << (colAt[c] as number);
+        if ((rowUsed & rb) || (colUsed & cb)) continue;
+        if (!consistent(p, c)) continue;
+        list.push(c);
+        rowCover |= rb;
+        colCover |= cb;
+      }
       if (list.length === 0) return false;
       if (best < 0 || list.length < bestList.length) { best = p; bestList = list; }
-      if (list.length === 1) break;
     }
+    // every free row / column must still be reachable by someone
+    if (prob.fullRows && rowCover !== allRows) return false;
+    if (prob.fullCols && colCover !== allCols) return false;
     for (const c of bestList) {
+      const rb = 1 << (rowAt[c] as number), cb = 1 << (colAt[c] as number);
       pos[best] = c;
-      occ[c] = 1;
+      rowUsed |= rb;
+      colUsed |= cb;
       if (rec(placed + 1)) return true;
-      occ[c] = 0;
+      rowUsed &= ~rb;
+      colUsed &= ~cb;
       pos[best] = -1;
     }
     return false;

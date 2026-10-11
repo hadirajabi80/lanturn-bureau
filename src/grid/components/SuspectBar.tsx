@@ -15,10 +15,15 @@ export interface SuspectBarProps {
   className?: string;
 }
 
-/** Horizontally scrollable carousel of avatar tiles (64 px), selected one outlined in orange. */
+/**
+ * Horizontally scrollable carousel of avatar tiles (64 px; 52 px when there are more than 8 people),
+ * selected one outlined in orange and kept in view, placed ones ticked.
+ */
 export function SuspectBar({ people, placements, selectedId, onSelect, violations = [], className }: SuspectBarProps) {
   const scroller = useRef<HTMLDivElement>(null);
   const [edges, setEdges] = useState({ left: false, right: false });
+  const compact = people.length > 8;
+  const placedCount = people.filter((p) => !!placements[p.id]).length;
 
   const measure = useCallback(() => {
     const el = scroller.current;
@@ -39,7 +44,16 @@ export function SuspectBar({ people, placements, selectedId, onSelect, violation
   useEffect(() => {
     if (!selectedId) return;
     const el = scroller.current?.querySelector<HTMLElement>(`[data-person="${CSS.escape(selectedId)}"]`);
-    el?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+    const box = scroller.current;
+    if (!el || !box) return;
+    // Scroll only the carousel (never the page): bring the tile fully into view with a little margin.
+    const pad = 24;
+    const left = el.offsetLeft; // the scroller is the offsetParent (position: relative)
+    const right = left + el.offsetWidth;
+    let target = box.scrollLeft;
+    if (left - pad < box.scrollLeft) target = left - pad;
+    else if (right + pad > box.scrollLeft + box.clientWidth) target = right + pad - box.clientWidth;
+    if (target !== box.scrollLeft) box.scrollTo({ left: Math.max(0, target), behavior: 'smooth' });
   }, [selectedId]);
 
   const nudge = (dir: -1 | 1) => scroller.current?.scrollBy({ left: dir * 180, behavior: 'smooth' });
@@ -50,9 +64,12 @@ export function SuspectBar({ people, placements, selectedId, onSelect, violation
         ref={scroller}
         onScroll={measure}
         role="listbox"
-        aria-label="Suspects"
+        aria-label={`Suspects, ${placedCount} of ${people.length} placed`}
         aria-orientation="horizontal"
-        className="flex snap-x gap-2.5 overflow-x-auto px-1 pb-1 pt-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className={clsx(
+          'relative flex snap-x overflow-x-auto overscroll-x-contain px-1 pb-1 pt-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+          compact ? 'gap-1.5' : 'gap-2.5',
+        )}
       >
         {people.map((p) => {
           const selected = p.id === selectedId;
@@ -66,11 +83,13 @@ export function SuspectBar({ people, placements, selectedId, onSelect, violation
               aria-selected={selected}
               data-person={p.id}
               onClick={() => onSelect(p.id)}
-              className="group flex w-[72px] shrink-0 snap-start flex-col items-center gap-1 outline-none"
+              aria-label={`${p.isVictim ? 'Victim: ' : ''}${p.name}${placed ? ', placed' : ''}`}
+              className={clsx('group flex shrink-0 snap-start flex-col items-center gap-1 outline-none', compact ? 'w-[60px]' : 'w-[72px]')}
             >
               <motion.span
                 className={clsx(
-                  'relative grid size-16 place-items-center rounded-2xl transition-shadow',
+                  'relative grid place-items-center rounded-2xl transition-shadow',
+                  compact ? 'size-[52px]' : 'size-16',
                   selected
                     ? 'shadow-[0_0_0_3px_#e8632b,0_10px_18px_-10px_rgb(232_99_43/0.8)]'
                     : 'shadow-[0_6px_14px_-10px_rgb(70_45_20/0.5)] ring-1 ring-black/5 group-focus-visible:shadow-[0_0_0_3px_#e8632b80]',
@@ -80,8 +99,8 @@ export function SuspectBar({ people, placements, selectedId, onSelect, violation
                 transition={bad ? { duration: 1.6, ease: 'easeInOut' } : { duration: 0.2 }}
                 whileTap={{ scale: 0.93 }}
               >
-                <span className="block size-14 overflow-hidden rounded-xl">
-                  <Avatar spec={p.avatar} size={56} />
+                <span className={clsx('block overflow-hidden rounded-xl', compact ? 'size-[44px]' : 'size-14')}>
+                  <Avatar spec={p.avatar} size={compact ? 44 : 56} />
                 </span>
                 {p.isVictim && (
                   <span
@@ -99,7 +118,8 @@ export function SuspectBar({ people, placements, selectedId, onSelect, violation
               </motion.span>
               <span
                 className={clsx(
-                  'w-full truncate text-center text-[12px] leading-tight',
+                  'w-full truncate text-center leading-tight',
+                  compact ? 'text-[11px]' : 'text-[12px]',
                   selected ? 'font-bold text-[#e8632b]' : 'font-medium text-[#2b2724]',
                 )}
               >
@@ -114,7 +134,7 @@ export function SuspectBar({ people, placements, selectedId, onSelect, violation
           type="button"
           aria-label="Scroll suspects left"
           onClick={() => nudge(-1)}
-          className="absolute -left-2 top-7 grid size-7 place-items-center rounded-full bg-white text-[#e8632b] shadow-md ring-1 ring-black/5"
+          className={clsx('absolute -left-2 grid size-7 place-items-center rounded-full bg-white text-[#e8632b] shadow-md ring-1 ring-black/5', compact ? 'top-5' : 'top-7')}
         >
           <ChevronLeft className="size-4" strokeWidth={3} />
         </button>
@@ -124,7 +144,7 @@ export function SuspectBar({ people, placements, selectedId, onSelect, violation
           type="button"
           aria-label="Scroll suspects right"
           onClick={() => nudge(1)}
-          className="absolute -right-2 top-7 grid size-7 place-items-center rounded-full bg-white text-[#e8632b] shadow-md ring-1 ring-black/5"
+          className={clsx('absolute -right-2 grid size-7 place-items-center rounded-full bg-white text-[#e8632b] shadow-md ring-1 ring-black/5', compact ? 'top-5' : 'top-7')}
         >
           <ChevronRight className="size-4" strokeWidth={3} />
         </button>

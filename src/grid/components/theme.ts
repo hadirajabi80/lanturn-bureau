@@ -3,6 +3,7 @@
  */
 import { Fingerprint, Flame, Search, Skull, type LucideIcon } from 'lucide-react';
 import { sfx } from '@/engine/audio';
+import * as gridEngine from '@/grid/engine';
 import { useFiles } from '@/grid/store';
 import { TIERS, type Season, type Tier } from '@/grid/types';
 
@@ -26,17 +27,18 @@ export interface TierMeta {
   label: string;
   color: string;
   icon: LucideIcon;
-  /** Grid size range (square side) at case 1 and case 40, see GRID-PLAN §2. */
+  /** Fallback grid size range (square side) at case 1 and the last case; prefer `gridSide()`. */
   minSize: number;
   maxSize: number;
+  /** Suspects (people minus the victim) at case 1 and the last case: an N×N map holds N people. */
   people: [number, number];
 }
 
 export const TIER_META: Record<Tier, TierMeta> = {
   easy: { label: 'Easy', color: C.green, icon: Search, minSize: 4, maxSize: 5, people: [3, 4] },
   medium: { label: 'Medium', color: C.amber, icon: Fingerprint, minSize: 5, maxSize: 6, people: [4, 5] },
-  hard: { label: 'Hard', color: C.red, icon: Flame, minSize: 6, maxSize: 7, people: [5, 6] },
-  extreme: { label: 'Extreme', color: C.purple, icon: Skull, minSize: 7, maxSize: 8, people: [6, 8] },
+  hard: { label: 'Hard', color: C.red, icon: Flame, minSize: 6, maxSize: 8, people: [5, 7] },
+  extreme: { label: 'Extreme', color: C.purple, icon: Skull, minSize: 8, maxSize: 12, people: [7, 11] },
 };
 
 export const isTier = (t: string | undefined): t is Tier => !!t && (TIERS as string[]).includes(t);
@@ -79,4 +81,33 @@ type SfxName = 'blip' | 'reveal' | 'wrong' | 'success' | 'stamp' | 'contradictio
 export function play(name: SfxName): void {
   if (!useFiles.getState().settings.sound) return;
   sfx[name]();
+}
+
+type GridSizeFor = (tier: Tier, index: number) => number | { rows?: number; cols?: number; size?: number; n?: number };
+
+/**
+ * Square side of case `index` in `tier`. Uses the engine's `gridSizeFor` when it exists,
+ * otherwise interpolates the TIER_META fallback range across `casesPerTier` cases.
+ */
+export function gridSide(tier: Tier, index: number, casesPerTier = 40): number {
+  const fn = (gridEngine as unknown as { gridSizeFor?: GridSizeFor }).gridSizeFor;
+  if (typeof fn === 'function') {
+    try {
+      const v = fn(tier, index);
+      const n = typeof v === 'number' ? v : Math.max(v.rows ?? 0, v.cols ?? 0, v.size ?? 0, v.n ?? 0);
+      if (Number.isFinite(n) && n > 0) return n;
+    } catch {
+      /* fall through to the local table */
+    }
+  }
+  const { minSize, maxSize } = TIER_META[tier];
+  const t = casesPerTier > 1 ? (Math.min(Math.max(index, 1), casesPerTier) - 1) / (casesPerTier - 1) : 0;
+  return Math.round(minSize + (maxSize - minSize) * t);
+}
+
+/** Smallest and largest square side within a tier. */
+export function tierSizeRange(tier: Tier, casesPerTier = 40): { min: number; max: number } {
+  const a = gridSide(tier, 1, casesPerTier);
+  const b = gridSide(tier, casesPerTier, casesPerTier);
+  return { min: Math.min(a, b), max: Math.max(a, b) };
 }

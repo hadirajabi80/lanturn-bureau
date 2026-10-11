@@ -10,7 +10,7 @@ import type { Cell, Predicate } from '../types';
 import { OCCUPIABLE } from '../types';
 import type { GridCtx, GridLike } from './geometry';
 import {
-  adjacent, buildGridCtx, cellIndex, colOf, isCorner, isEdge, lineOfSight, manhattan, rowOf, strictlyBetween,
+  buildGridCtx, cellIndex, colOf, diagAdjacent, isCorner, isEdge, lineOfSight, manhattan, rowOf, strictlyBetween,
 } from './geometry';
 
 export type Tri = 1 | 0 | -1;
@@ -142,10 +142,11 @@ export function compilePredicate(p: Predicate, self: number, ctx: PuzzleCtx): Po
       return binary(self, who(p.personId), (a, b) => g.roomOf[a] === g.roomOf[b]);
     case 'differentRoomFrom':
       return binary(self, who(p.personId), (a, b) => g.roomOf[a] !== g.roomOf[b]);
+    // People never share a row or column, so two people can only touch diagonally.
     case 'besidePerson':
-      return binary(self, who(p.personId), (a, b) => adjacent(g, a, b));
+      return binary(self, who(p.personId), (a, b) => diagAdjacent(g, a, b));
     case 'notBesidePerson':
-      return binary(self, who(p.personId), (a, b) => !adjacent(g, a, b));
+      return binary(self, who(p.personId), (a, b) => !diagAdjacent(g, a, b));
     case 'sameRowAs':
       return binary(self, who(p.personId), (a, b) => rowOf(g, a) === rowOf(g, b));
     case 'sameColAs':

@@ -74,36 +74,49 @@ export function isEdge(g: GridCtx, i: number): boolean {
   return r === 0 || c === 0 || r === g.rows - 1 || c === g.cols - 1;
 }
 
-/**
- * Line of sight: same row or column, different cells, and no blocking
- * (non-occupiable) furniture strictly between them. People never block.
- */
-export function lineOfSight(g: GridCtx, a: number, b: number): boolean {
-  if (a === b) return false;
-  const ra = rowOf(g, a), ca = colOf(g, a), rb = rowOf(g, b), cb = colOf(g, b);
-  if (ra === rb) {
-    const lo = Math.min(ca, cb), hi = Math.max(ca, cb);
-    for (let c = lo + 1; c < hi; c++) if (g.blocked[ra * g.cols + c]) return false;
-    return true;
-  }
-  if (ca === cb) {
-    const lo = Math.min(ra, rb), hi = Math.max(ra, rb);
-    for (let r = lo + 1; r < hi; r++) if (g.blocked[r * g.cols + ca]) return false;
-    return true;
-  }
-  return false;
+/** Diagonal neighbours (touching corner to corner). */
+export function diagAdjacent(g: GridCtx, a: number, b: number): boolean {
+  return Math.abs(rowOf(g, a) - rowOf(g, b)) === 1 && Math.abs(colOf(g, a) - colOf(g, b)) === 1;
 }
 
-/** True when the straight segment between a and b (same row/col) has at least one blocking cell anywhere on its line. */
-export function lineHasBlocker(g: GridCtx, a: number, b: number): boolean {
-  const ra = rowOf(g, a), ca = colOf(g, a), rb = rowOf(g, b), cb = colOf(g, b);
-  if (ra === rb) {
-    for (let c = 0; c < g.cols; c++) if (g.blocked[ra * g.cols + c]) return true;
-    return false;
+/** Unit step from a towards b when they share a row, column or diagonal; null otherwise. */
+function lineStep(g: GridCtx, a: number, b: number): [number, number] | null {
+  const dr = rowOf(g, b) - rowOf(g, a), dc = colOf(g, b) - colOf(g, a);
+  if (dr === 0 && dc === 0) return null;
+  if (dr !== 0 && dc !== 0 && Math.abs(dr) !== Math.abs(dc)) return null;
+  return [Math.sign(dr), Math.sign(dc)];
+}
+
+/**
+ * Line of sight: same row, column or diagonal, different cells, and no
+ * blocking (non-occupiable) furniture strictly between them. People never
+ * block. (People never share a row or column, so between two people sight
+ * is always along a diagonal.)
+ */
+export function lineOfSight(g: GridCtx, a: number, b: number): boolean {
+  const st = lineStep(g, a, b);
+  if (!st) return false;
+  let r = rowOf(g, a) + st[0], c = colOf(g, a) + st[1];
+  const rb = rowOf(g, b), cb = colOf(g, b);
+  while (r !== rb || c !== cb) {
+    if (g.blocked[r * g.cols + c]) return false;
+    r += st[0];
+    c += st[1];
   }
-  if (ca === cb) {
-    for (let r = 0; r < g.rows; r++) if (g.blocked[r * g.cols + ca]) return true;
-    return false;
+  return true;
+}
+
+/** True when a and b share a row, column or diagonal and a blocking cell lies somewhere on that whole line. */
+export function lineHasBlocker(g: GridCtx, a: number, b: number): boolean {
+  const st = lineStep(g, a, b);
+  if (!st) return false;
+  for (const sgn of [1, -1]) {
+    let r = rowOf(g, a) + st[0] * sgn, c = colOf(g, a) + st[1] * sgn;
+    while (r >= 0 && c >= 0 && r < g.rows && c < g.cols) {
+      if (g.blocked[r * g.cols + c]) return true;
+      r += st[0] * sgn;
+      c += st[1] * sgn;
+    }
   }
   return false;
 }

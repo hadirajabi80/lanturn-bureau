@@ -8,7 +8,7 @@ import type { Season } from '@/grid/types';
 import { caseStatus, puzzleIdOf, tierProgress, useFiles } from '@/grid/store';
 import { FilesHeader, FilesPage } from '@/grid/components/FilesPage';
 import { StatusPill } from '@/grid/components/StatusPill';
-import { TIER_META, isTier, pad2 } from '@/grid/components/theme';
+import { TIER_META, isTier, pad2, tierSizeRange } from '@/grid/components/theme';
 
 type Filter = 'pending' | 'all';
 
@@ -76,7 +76,7 @@ export default function CaseList() {
             </button>
           ))}
         </div>
-        <SizeRamp min={meta.minSize} max={meta.maxSize} color={meta.color} />
+        <SizeRamp {...tierSizeRange(tier, season.casesPerTier)} color={meta.color} />
       </div>
 
       {visible.length === 0 ? (

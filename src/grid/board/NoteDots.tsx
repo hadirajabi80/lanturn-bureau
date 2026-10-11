@@ -39,31 +39,39 @@ const CORNERS: Array<[number, number]> = [
   [0, 1],
   [1, 1],
 ];
+/** Two-slot layout for dense boards: opposite corners, bigger faces. */
+const DIAGONAL: Array<[number, number]> = [
+  [0, 0],
+  [1, 1],
+];
 
 export interface NoteDotsProps {
   cell: Cell;
   personIds: string[];
   people: Map<string, Person>;
+  /** Faces shown per cell (4, or 2 on dense boards); the last slot becomes "+N" on overflow. */
+  max?: 2 | 4;
 }
 
-/** Up to four pencil-mark faces in the corners of a cell. */
-function NoteDotsImpl({ cell, personIds, people }: NoteDotsProps): JSX.Element | null {
+/** Up to four (or two) pencil-mark faces in the corners of a cell. */
+function NoteDotsImpl({ cell, personIds, people, max = 4 }: NoteDotsProps): JSX.Element | null {
   const shown = personIds.map((id) => people.get(id)).filter((p): p is Person => !!p);
   if (shown.length === 0) return null;
-  const r = 11.5;
-  const off = 19;
-  const extra = shown.length - 4;
+  const slots = max === 2 ? DIAGONAL : CORNERS;
+  const r = max === 2 ? 17 : 11.5;
+  const off = max === 2 ? 25 : 19;
+  const extra = shown.length - max;
   return (
     <g transform={`translate(${cell.c * 100} ${cell.r * 100})`} pointerEvents="none">
-      {shown.slice(0, 4).map((p, i) => {
-        const [fx, fy] = CORNERS[i] ?? [0, 0];
+      {shown.slice(0, max).map((p, i) => {
+        const [fx, fy] = slots[i] ?? [0, 0];
         const cx = fx ? 100 - off : off;
         const cy = fy ? 100 - off : off;
-        if (i === 3 && extra > 0) {
+        if (i === max - 1 && extra > 0) {
           return (
             <g key="more" transform={`translate(${cx} ${cy})`}>
-              <circle r={r} fill="#fffdf8" stroke={INK} strokeOpacity={0.35} strokeWidth={1.6} />
-              <text textAnchor="middle" dominantBaseline="central" fontSize={11} fontWeight={800} fill={INK}>
+              <circle r={r} fill="#fffdf8" stroke={INK} strokeOpacity={0.35} strokeWidth={r * 0.14} />
+              <text textAnchor="middle" dominantBaseline="central" fontSize={r * 0.96} fontWeight={800} fill={INK}>
                 +{extra + 1}
               </text>
             </g>

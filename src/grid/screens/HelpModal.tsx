@@ -9,17 +9,26 @@ export interface HelpModalProps {
 }
 
 /** Cell kinds for the tiny illustration grids. */
-type K = '.' | 'me' | 'ok' | 'x' | 'block' | 'p';
+type K = '.' | 'me' | 'p' | 'k' | 'ok' | 'x' | 'block' | 'furn' | 'ra' | 'rb' | 'rc';
+
+const CHAR: Record<string, K> = {
+  M: 'me', // a suspect
+  P: 'p', // the victim
+  K: 'k', // the killer
+  o: 'ok',
+  x: 'x',
+  '#': 'block',
+  f: 'furn',
+  a: 'ra',
+  b: 'rb',
+  c: 'rc',
+};
 
 const ROWS = (s: string): K[][] =>
   s
     .trim()
     .split('/')
-    .map((row) =>
-      row.split('').map((ch) =>
-        ch === 'M' ? 'me' : ch === 'o' ? 'ok' : ch === 'x' ? 'x' : ch === '#' ? 'block' : ch === 'P' ? 'p' : '.',
-      ),
-    );
+    .map((row) => row.split('').map((ch) => CHAR[ch] ?? '.'));
 
 function MiniGrid({ cells }: { cells: K[][] }) {
   const cols = cells[0]?.length ?? 3;
@@ -33,59 +42,96 @@ function MiniGrid({ cells }: { cells: K[][] }) {
         <span
           key={i}
           className={clsx(
-            'grid size-[14px] place-items-center rounded-[3px] text-[8px] font-black',
+            'grid size-[14px] place-items-center rounded-[3px]',
             k === 'me' && 'bg-[#e8632b]',
-            k === 'ok' && 'bg-[#bfe3c7]',
-            k === 'x' && 'bg-[#f6d5d1]',
-            k === 'block' && 'bg-[#6b5a48]',
             k === 'p' && 'bg-[#7b4fd6]',
+            k === 'k' && 'bg-[#c8323c]',
+            k === 'ok' && 'bg-[#bfe3c7]',
+            k === 'x' && 'bg-[repeating-linear-gradient(45deg,#e6ddd0_0_2px,#fbf8f3_2px_4px)]',
+            k === 'block' && 'bg-[#6b5a48]',
+            k === 'furn' && 'bg-[#d9b98c]',
+            k === 'ra' && 'bg-[#f3d9a4]',
+            k === 'rb' && 'bg-[#c9e2f2]',
+            k === 'rc' && 'bg-[#d6ecc9]',
             k === '.' && 'bg-[#fbf8f3]',
           )}
-        />
+        >
+          {k === 'furn' && <span className="size-[5px] rounded-full bg-[#8a6a43]" />}
+        </span>
       ))}
     </div>
   );
 }
 
-const RULES: { grid: string; title: string; body: ReactNode }[] = [
+interface Rule {
+  grid: string;
+  title: string;
+  body: ReactNode;
+}
+
+/** The four core rules, in the order a player meets them. */
+const RULES: Rule[] = [
   {
-    grid: '.o../.Mo./..o.',
-    title: 'One person, one cell',
-    body: 'Place every suspect and the victim. Nobody shares a cell.',
+    grid: '.M../...M/P.../..M.',
+    title: 'Place everybody',
+    body: 'Put every suspect and the victim on the map. Nobody shares a cell.',
   },
   {
-    grid: '.#../.oo./#.o.',
-    title: 'Furniture',
-    body: 'Chairs, sofas, rugs, beds, stools, benches and bathtubs can be stood on. Tables, crates, plants and the like block the cell.',
+    grid: '..x./xxMx/..x./..x.',
+    title: 'One per row, one per column',
+    body: 'Each row and each column holds exactly one person. Once someone is placed, their row and column are shaded.',
   },
   {
-    grid: '.o./oMo/.o.',
-    title: '“Beside”',
-    body: 'Orthogonally adjacent — up, down, left or right. Never diagonal.',
-  },
-  {
-    grid: 'ooo/ooo/.P.',
-    title: '“North of” vs “directly north of”',
-    body: 'North of X = any row above X. Directly north = same column, above.',
-  },
-  {
-    grid: 'Moo#x/o..../P....',
-    title: '“Could see”',
-    body: 'Same row or column with no blocking furniture in between. People never block the view.',
-  },
-  {
-    grid: 'PoooP',
-    title: '“Between A and B”',
-    body: 'In the same row (or column) as both, strictly between them.',
-  },
-  {
-    grid: 'o.o/.../o.o',
-    title: 'Rows, columns, corners, edges',
-    body: '“Row 3” counts from the top. Corners are the four grid corners; the edge is any border cell.',
+    grid: 'aaPb/aKbb/ccbM/Mccb',
+    title: 'Find the killer',
+    body: 'The killer is the one person who was in the same room as the victim.',
   },
 ];
 
-/** Rules of the puzzle (GRID-PLAN §1) + settings toggles. */
+/** How to read the sentences on each person’s card. */
+const WORDS: Rule[] = [
+  {
+    grid: '.o./oMo/.o.',
+    title: '“Beside”',
+    body: 'For furniture: up, down, left or right of it. Two people can only be beside each other diagonally (one per row and column!). Sight lines run along rows, columns and diagonals and are blocked by furniture.',
+  },
+  {
+    grid: '.#f/fM./#.f',
+    title: '“On”',
+    body: 'Standing or sitting on that piece of furniture (chair, sofa, rug, bed, bench…). Tables, crates, plants and the like block the cell.',
+  },
+  {
+    grid: 'aaab/aabb/ccbb/cccb',
+    title: 'Rooms',
+    body: 'Rooms are the coloured areas, each with a name label. Walls mark where one room ends.',
+  },
+  {
+    grid: 'ooo/ooo/.M.',
+    title: 'Directions & rows',
+    body: '“North of” is any row above; “directly north” is the same column, above. “Row 3” counts from the top.',
+  },
+];
+
+function RuleCard({ rule, step }: { rule: Rule; step?: number }) {
+  return (
+    <li className="flex items-center gap-3.5 rounded-2xl bg-white p-3 ring-1 ring-black/5">
+      <MiniGrid cells={ROWS(rule.grid)} />
+      <div className="min-w-0">
+        <div className="flex items-center gap-1.5 text-[14px] font-bold text-[#2b2724]">
+          {step !== undefined && (
+            <span className="grid size-[18px] shrink-0 place-items-center rounded-full bg-[#2b2724] text-[11px] font-black text-white">
+              {step}
+            </span>
+          )}
+          {rule.title}
+        </div>
+        <div className="text-[13px] leading-snug text-[#5b524a]">{rule.body}</div>
+      </div>
+    </li>
+  );
+}
+
+/** Rules of the puzzle + settings toggles. */
 export function HelpModal({ open, onClose }: HelpModalProps) {
   const assist = useFiles((s) => s.settings.assist);
   const sound = useFiles((s) => s.settings.sound);
@@ -95,18 +141,24 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
   return (
     <Sheet open={open} onClose={onClose} eyebrow="How to play" title="Crack the floor plan">
       <p className="mb-4 text-[14px] leading-relaxed text-[#5b524a]">
-        Every clue is true and together they allow exactly <strong>one</strong> placement. Place everybody, submit, then
-        name the killer using the victim’s clue.
+        An <strong>N×N</strong> map holds exactly <strong>N</strong> people. Every sentence is true and together they allow
+        exactly <strong>one</strong> placement. Place everybody, submit, then name the killer.
+      </p>
+      <p className="-mt-2 mb-4 text-[12px] leading-snug text-[#8a8178]">
+        Maps grow with the difficulty: small 4×4 files in Easy, all the way up to 12×12 (twelve people) in Extreme.
       </p>
       <ul className="flex flex-col gap-3">
-        {RULES.map((r) => (
-          <li key={r.title} className="flex items-center gap-3.5 rounded-2xl bg-white p-3 ring-1 ring-black/5">
-            <MiniGrid cells={ROWS(r.grid)} />
-            <div className="min-w-0">
-              <div className="text-[14px] font-bold text-[#2b2724]">{r.title}</div>
-              <div className="text-[13px] leading-snug text-[#5b524a]">{r.body}</div>
-            </div>
-          </li>
+        {RULES.map((r, i) => (
+          <RuleCard key={r.title} rule={r} step={i + 1} />
+        ))}
+      </ul>
+
+      <h3 className="mb-2 mt-5 text-[11px] font-bold uppercase tracking-[0.18em] text-[#8a8178]">
+        Reading each person’s sentences
+      </h3>
+      <ul className="flex flex-col gap-3">
+        {WORDS.map((r) => (
+          <RuleCard key={r.title} rule={r} />
         ))}
       </ul>
 

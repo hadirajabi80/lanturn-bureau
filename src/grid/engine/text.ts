@@ -79,8 +79,8 @@ function fragment(pr: Predicate, e: Env): string {
     case 'edge': return pr.value ? 'on the edge of the map' : 'not on the edge of the map';
     case 'sameRoomAs': return `in the same room as ${e.name(pr.personId)}`;
     case 'differentRoomFrom': return `not in the same room as ${e.name(pr.personId)}`;
-    case 'besidePerson': return `beside ${e.name(pr.personId)}`;
-    case 'notBesidePerson': return `not beside ${e.name(pr.personId)}`;
+    case 'besidePerson': return `diagonally beside ${e.name(pr.personId)}`;
+    case 'notBesidePerson': return `not diagonally beside ${e.name(pr.personId)}`;
     case 'sameRowAs': return `in the same row as ${e.name(pr.personId)}`;
     case 'sameColAs': return `in the same column as ${e.name(pr.personId)}`;
     case 'dirOf': return `somewhere ${pr.dir} of ${e.name(pr.personId)}`;
@@ -143,8 +143,8 @@ function variants(pr: Predicate, e: Env): string[] {
       : [primary, was('away from the outer edge of the map')];
     case 'sameRoomAs': return [primary, `${S} shared a room with ${e.name(pr.personId)}.`];
     case 'differentRoomFrom': return [primary, `${S} and ${e.name(pr.personId)} were in different rooms.`];
-    case 'besidePerson': return [primary, was(`right next to ${e.name(pr.personId)}`)];
-    case 'notBesidePerson': return [primary, was(`not right next to ${e.name(pr.personId)}`)];
+    case 'besidePerson': return [primary, `${S} and ${e.name(pr.personId)} were diagonal neighbours.`];
+    case 'notBesidePerson': return [primary, was(`not touching ${e.name(pr.personId)}, not even diagonally`)];
     case 'sameRowAs': return [primary, `${S} and ${e.name(pr.personId)} were in the same row.`];
     case 'sameColAs': return [primary, `${S} and ${e.name(pr.personId)} were in the same column.`];
     case 'dirOf': return [primary, was(`further ${pr.dir} than ${e.name(pr.personId)}`)];
@@ -161,7 +161,7 @@ function variants(pr: Predicate, e: Env): string[] {
     case 'lineOfSight': {
       const X = e.name(pr.personId);
       return pr.value
-        ? [`${S} could see ${X}.`, `${S} had a clear view of ${X}.`]
+        ? [`${S} could see ${X}.`, `${S} had a clear diagonal view of ${X}.`]
         : [`${S} could not see ${X}.`, `${S} had no view of ${X}.`];
     }
     case 'between': return [primary, was(`in a straight line between ${e.name(pr.a)} and ${e.name(pr.b)}`)];

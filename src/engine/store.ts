@@ -112,12 +112,9 @@ export function currentScore(session: Session | null | undefined): number {
   return computeScore(session);
 }
 
-export function isUnlockedIn(progress: Record<string, CaseProgress>, caseId: string): boolean {
-  const i = CASES.findIndex((c) => c.id === caseId);
-  if (i < 0) return false;
-  if (i === 0) return true;
-  const prev = CASES[i - 1];
-  return Boolean(prev && progress[prev.id]?.solved);
+/** Every story case is open from the start; only unknown ids are "locked". `progress` is kept for API stability. */
+export function isUnlockedIn(_progress: Record<string, CaseProgress>, caseId: string): boolean {
+  return CASES.some((c) => c.id === caseId);
 }
 
 export function tierBadgesIn(progress: Record<string, CaseProgress>): Record<Difficulty, boolean> {

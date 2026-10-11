@@ -106,7 +106,7 @@ export type Predicate =
   | { type: 'edge'; value: boolean }                            // on the outer border of the grid
   | { type: 'sameRoomAs'; personId: string }
   | { type: 'differentRoomFrom'; personId: string }
-  | { type: 'besidePerson'; personId: string }
+  | { type: 'besidePerson'; personId: string }               // diagonal neighbours (people never share a row/column)
   | { type: 'notBesidePerson'; personId: string }
   | { type: 'sameRowAs'; personId: string }
   | { type: 'sameColAs'; personId: string }
@@ -117,7 +117,7 @@ export type Predicate =
   | { type: 'roomCount'; cmp: Cmp; n: number }                  // number of people in own room (including self)
   | { type: 'roomHasFurniture'; kind: FurnitureKind; value: boolean }
   | { type: 'roomSizeCmp'; cmp: Cmp; n: number }                // room cell count
-  | { type: 'lineOfSight'; personId: string; value: boolean }   // same row/col, no blocking (non-occupiable) furniture between
+  | { type: 'lineOfSight'; personId: string; value: boolean }   // same row/col/diagonal, no blocking (non-occupiable) furniture between
   | { type: 'between'; a: string; b: string }                   // strictly between two people in the same row or column
   | { type: 'or'; a: Predicate; b: Predicate }
   | { type: 'not'; p: Predicate };

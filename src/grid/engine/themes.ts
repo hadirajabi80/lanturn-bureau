@@ -4,7 +4,10 @@
  */
 import type { Season, Theme } from '../types';
 
-/** Warm flat-illustration palettes: tans, greys, mint, peach, lilac. 8 distinct colours each. */
+/** Warm flat-illustration palettes: tans, greys, mint, peach, lilac. 8 base colours each (+ EXTRA). */
+/** Extra soft tones so even 12×12 maps (up to 13 rooms) get distinct room colours. */
+const EXTRA = ['#D5E4C3', '#F0CFD7', '#C6D4EA', '#E8DDB2', '#D6CAC0', '#C2E0DC'];
+
 const WARM = ['#E8D5B0', '#D9D4CC', '#CDE5D3', '#F3D3BD', '#DDD2EA', '#E3C7A3', '#C9DAE3', '#EFE4C6'];
 
 export const THEMES: Record<string, Theme> = {
@@ -18,7 +21,7 @@ export const THEMES: Record<string, Theme> = {
     furniture: ['chair', 'armchair', 'sofa', 'rug', 'bed', 'table', 'desk', 'plant', 'piano', 'bookshelf',
       'fireplace', 'bathtub', 'lamp', 'cabinet', 'statue', 'globe', 'stool'],
     floors: ['wood', 'carpet', 'checker', 'marble', 'tile'],
-    palette: WARM,
+    palette: [...WARM, ...EXTRA],
     titleWords: {
       a: ['Torn', 'Crooked', 'Silent', 'Borrowed', 'Final', 'Uninvited', 'Midnight', 'Forgotten', 'Gilded', 'Broken',
         'Last', 'Missing', 'Second', 'Locked', 'Quiet', 'Velvet', 'Hollow', 'Bitter', 'Faded', 'Unsigned', 'Cold', 'Wrong'],
@@ -37,7 +40,7 @@ export const THEMES: Record<string, Theme> = {
     furniture: ['crate', 'barrel', 'bin', 'bananas', 'plant', 'stool', 'bench', 'counter', 'table', 'chair',
       'trolley', 'rug', 'lamp', 'fridge'],
     floors: ['stone', 'concrete', 'tile', 'wood', 'sand'],
-    palette: ['#EAD9B5', '#D6D3CD', '#CBE4D2', '#F5D0B5', '#DCD3EC', '#E6CFA0', '#C8D8E0', '#F0E2C2'],
+    palette: ['#EAD9B5', '#D6D3CD', '#CBE4D2', '#F5D0B5', '#DCD3EC', '#E6CFA0', '#C8D8E0', '#F0E2C2', ...EXTRA],
     titleWords: {
       a: ['Spoiled', 'Crooked', 'Short', 'Counterfeit', 'Early', 'Bruised', 'Rival', 'Unpaid', 'Stolen', 'Rotten',
         'Lucky', 'Missing', 'Haggled', 'Second', 'Torn', 'Sour', 'Last', 'Weighted', 'Busy', 'Empty', 'Market-Day', 'Rusty'],
@@ -56,7 +59,7 @@ export const THEMES: Record<string, Theme> = {
     furniture: ['anchor', 'barrel', 'crate', 'suitcase', 'bench', 'chair', 'bed', 'table', 'lamp', 'plant', 'sofa',
       'stool', 'rug', 'trolley', 'armchair'],
     floors: ['deck', 'wood', 'carpet', 'tile', 'checker'],
-    palette: ['#E6D6B3', '#D3D6D9', '#C9E3D8', '#F2D2BE', '#D9D3EB', '#E0C8A6', '#C3D7E4', '#EEE3CA'],
+    palette: ['#E6D6B3', '#D3D6D9', '#C9E3D8', '#F2D2BE', '#D9D3EB', '#E0C8A6', '#C3D7E4', '#EEE3CA', ...EXTRA],
     titleWords: {
       a: ['Drifting', 'Sunken', 'Midnight', 'Salted', 'Final', 'Uncharted', 'Foggy', 'Lost', 'Stowaway', 'Silent',
         'Broken', 'Last', 'Crooked', 'Rolling', 'Distant', 'Overboard', 'Second', 'Golden', 'Cold', 'Torn', 'Calm', 'Hidden'],
@@ -76,7 +79,7 @@ export const THEMES: Record<string, Theme> = {
     furniture: ['statue', 'easel', 'coffin', 'globe', 'bench', 'plant', 'cabinet', 'safe', 'rug', 'desk', 'chair',
       'lamp', 'bookshelf', 'stool'],
     floors: ['marble', 'stone', 'wood', 'checker', 'carpet'],
-    palette: ['#E9D7B2', '#DAD6CF', '#CFE4D4', '#F1D4C0', '#DED3E8', '#E2C9A5', '#CBD9E1', '#F0E6CC'],
+    palette: ['#E9D7B2', '#DAD6CF', '#CFE4D4', '#F1D4C0', '#DED3E8', '#E2C9A5', '#CBD9E1', '#F0E6CC', ...EXTRA],
     titleWords: {
       a: ['Forged', 'Cracked', 'Ancient', 'Missing', 'Restored', 'Cursed', 'Gilded', 'Silent', 'Borrowed', 'Final',
         'Hidden', 'Dusty', 'Broken', 'Last', 'Stolen', 'Faded', 'Second', 'Painted', 'Unsigned', 'Marble', 'Crooked', 'Sealed'],
@@ -95,7 +98,7 @@ export const THEMES: Record<string, Theme> = {
     furniture: ['bed', 'sofa', 'armchair', 'chair', 'table', 'plant', 'lamp', 'bathtub', 'trolley', 'suitcase',
       'counter', 'rug', 'piano', 'fridge', 'bin', 'stool'],
     floors: ['carpet', 'marble', 'tile', 'wood', 'checker'],
-    palette: ['#EBD8B7', '#D8D5D0', '#CCE6D5', '#F4D1BC', '#DFD4EC', '#E5CBA8', '#C7D9E5', '#F1E5C8'],
+    palette: ['#EBD8B7', '#D8D5D0', '#CCE6D5', '#F4D1BC', '#DFD4EC', '#E5CBA8', '#C7D9E5', '#F1E5C8', ...EXTRA],
     titleWords: {
       a: ['Late', 'Double', 'Do-Not-Disturb', 'Crooked', 'Midnight', 'Unpaid', 'Room-Service', 'Final', 'Golden',
         'Silent', 'Borrowed', 'Missing', 'Wrong', 'Last', 'Velvet', 'Spare', 'Second', 'Polished', 'Uninvited', 'Torn',
@@ -116,7 +119,7 @@ export const THEMES: Record<string, Theme> = {
     furniture: ['desk', 'chair', 'bookshelf', 'globe', 'bed', 'bench', 'plant', 'easel', 'piano', 'lamp', 'cabinet',
       'table', 'stool', 'rug'],
     floors: ['wood', 'stone', 'checker', 'carpet', 'grass'],
-    palette: ['#E7D6B4', '#D7D3CE', '#CEE3D1', '#F2D5BF', '#DCD1E9', '#E1C8A4', '#C8D8E2', '#EEE4C9'],
+    palette: ['#E7D6B4', '#D7D3CE', '#CEE3D1', '#F2D5BF', '#DCD1E9', '#E1C8A4', '#C8D8E2', '#EEE4C9', ...EXTRA],
     titleWords: {
       a: ['Failed', 'Secret', 'Crooked', 'Unfinished', 'Midnight', 'Forbidden', 'Borrowed', 'Final', 'Silent', 'Lost',
         'Second', 'Hidden', 'Expelled', 'Last', 'Torn', 'Inked', 'Missing', 'Prefect\'s', 'Quiet', 'Late', 'Copied', 'Sealed'],

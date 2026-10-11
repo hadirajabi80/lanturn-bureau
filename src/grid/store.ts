@@ -37,6 +37,8 @@ export type TapResult =
   | 'erased'
   | 'selected'
   | 'reject'
+  /** Placement refused because the row or column already holds a different person. */
+  | 'reject-line'
   | 'noop';
 
 export interface SubmitResult {
@@ -109,6 +111,19 @@ export function isBlocked(puzzle: Puzzle, cell: Cell): boolean {
 
 export function personAt(placements: Record<string, Cell | null>, cell: Cell): string | null {
   for (const [id, c] of Object.entries(placements)) if (sameCell(c, cell)) return id;
+  return null;
+}
+
+/** Id of a person other than `personId` already in the cell's row or column (one person per row and column). */
+export function lineConflict(
+  placements: Record<string, Cell | null>,
+  cell: Cell,
+  personId: string | null,
+): string | null {
+  for (const [id, c] of Object.entries(placements)) {
+    if (!c || id === personId) continue;
+    if (c.r === cell.r || c.c === cell.c) return id;
+  }
   return null;
 }
 
@@ -243,6 +258,7 @@ export const useFiles = create<GridState>()(
             });
             return 'removed';
           }
+          if (lineConflict(active.placements, cell, selectedPersonId)) return 'reject-line';
           const wasPlaced = !!active.placements[selectedPersonId];
           commit({
             ...active,
@@ -278,6 +294,11 @@ export const useFiles = create<GridState>()(
           const placements = { ...active.placements };
           const squatter = personAt(placements, cell);
           if (squatter && squatter !== target) placements[squatter] = null;
+          // One person per row and column: anyone wrongly sharing the revealed cell's row/column is picked up.
+          for (const [id, c] of Object.entries(placements)) {
+            if (!c || id === target || sameCell(c, puzzle.solution[id])) continue;
+            if (c.r === cell.r || c.c === cell.c) placements[id] = null;
+          }
           placements[target] = { r: cell.r, c: cell.c };
           commit({
             ...active,
