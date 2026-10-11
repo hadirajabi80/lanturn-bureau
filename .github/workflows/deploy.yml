@@ -65,6 +65,35 @@ jobs:
       name: production
       url: http://167.233.87.63:5050
     steps:
+      - name: Prepare and validate the SSH key
+        id: sshkey
+        env:
+          RAW_KEY: ${{ secrets.SSH_KEY }}
+          B64_KEY: ${{ secrets.SSH_KEY_B64 }}
+          HAS_PASSWORD: ${{ secrets.SSH_PASSWORD != '' }}
+        run: |
+          set -e
+          KEYFILE="$RUNNER_TEMP/deploy_key"
+          if [ -n "$B64_KEY" ]; then
+            printf '%s' "$B64_KEY" | tr -d ' \r\n' | base64 -d > "$KEYFILE" || { echo "::error::SSH_KEY_B64 is not valid base64"; exit 1; }
+          elif [ -n "$RAW_KEY" ]; then
+            # normalise Windows line endings and stray indentation from copy/paste
+            printf '%s\n' "$RAW_KEY" | tr -d '\r' | sed 's/^[[:space:]]*//' > "$KEYFILE"
+          elif [ "$HAS_PASSWORD" = "true" ]; then
+            echo "Using SSH_PASSWORD (no key secret set)."; echo "path=" >> "$GITHUB_OUTPUT"; exit 0
+          else
+            echo "::error::No SSH_KEY, SSH_KEY_B64 or SSH_PASSWORD secret is set."; exit 1
+          fi
+          chmod 600 "$KEYFILE"
+          LINES=$(wc -l < "$KEYFILE"); FIRST=$(head -n1 "$KEYFILE" | cut -c1-40)
+          case "$FIRST" in -----BEGIN*) ;; *) FIRST="(no BEGIN header line — key material redacted)";; esac
+          if ! ssh-keygen -y -f "$KEYFILE" > /dev/null 2>&1; then
+            echo "::error::The SSH key secret is not a valid private key. Lines: $LINES. First line: $FIRST. Did you paste the .pub file, or lose the BEGIN/END lines?"
+            exit 1
+          fi
+          echo "Key OK — fingerprint:"; ssh-keygen -lf "$KEYFILE"
+          echo "path=$KEYFILE" >> "$GITHUB_OUTPUT"
+
       - name: Pull and restart the container on the server
         uses: appleboy/ssh-action@v1.2.0
         env:
@@ -77,7 +106,7 @@ jobs:
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
+          key_path: ${{ steps.sshkey.outputs.path }}
           password: ${{ secrets.SSH_PASSWORD }}
           port: ${{ secrets.SSH_PORT || 22 }}
           envs: GHCR_USER,GHCR_TOKEN,IMAGE,TAG,CONTAINER,HOST_PORT
