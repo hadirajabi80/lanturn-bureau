@@ -14,10 +14,13 @@ export type WallStyle =
   | 'neon'       // glowing tube with bloom (neon quarter)
   | 'chalk'      // dusty chalk stroke on board-green (academy)
   | 'steel'      // riveted steel plate (train)
-  | 'blueprint'; // crisp white technical line with dimension ticks (observatory)
+  | 'blueprint'  // crisp white technical line with dimension ticks (observatory)
+  | 'ribbon'     // pastel satin ribbon with little bows at corners (patisserie)
+  | 'lace'       // scalloped white lace trim over a lilac line, pearl studs at corners (boutique)
+  | 'candy';     // candy-cane stripes with gumdrop corners (carnival)
 
 /** The paper/surface the floor plan is drawn on, around and under the rooms. */
-export type SheetStyle = 'parchment' | 'nautical' | 'lacquer' | 'gallery' | 'wet-asphalt' | 'chalkboard' | 'brushed-steel' | 'blueprint';
+export type SheetStyle = 'parchment' | 'nautical' | 'lacquer' | 'gallery' | 'wet-asphalt' | 'chalkboard' | 'brushed-steel' | 'blueprint' | 'gingham' | 'watercolor' | 'confetti';
 
 export interface SkinPalette {
   /** page background behind everything (dark — the Bureau is a night-time office). */
@@ -45,6 +48,8 @@ export interface SkinPalette {
 }
 
 export interface District {
+  /** 'light' districts use a bright daytime palette (dark ink on light panels); UI must read palette.bg luminance or this flag. */
+  mood?: 'night' | 'light';
   /** also the seasonId used by the engine & progress keys. */
   id: string;
   number: number;           // 1..8 display order
@@ -60,11 +65,11 @@ export interface District {
   palette: SkinPalette;
   /** facade silhouette description used by the hub's procedural building illustration. */
   facade: {
-    shape: 'manor' | 'lighthouse' | 'tower' | 'museum' | 'skyline' | 'gothic' | 'train' | 'dome';
+    shape: 'manor' | 'lighthouse' | 'tower' | 'museum' | 'skyline' | 'gothic' | 'train' | 'dome' | 'cottage' | 'boutique' | 'carnival';
     floors: number;         // window rows
     windowsPerFloor: number;
   };
-  ambience: 'clock' | 'waves' | 'jazz' | 'hush' | 'rain' | 'bells' | 'rails' | 'wind';
+  ambience: 'clock' | 'waves' | 'jazz' | 'hush' | 'rain' | 'bells' | 'rails' | 'wind' | 'musicbox' | 'harp' | 'calliope';
   icon: string;             // lucide icon name
   /** cases per tier for this district (mastermind has fewer). */
   casesPerTier: Record<'easy' | 'medium' | 'hard' | 'extreme' | 'mastermind', number>;

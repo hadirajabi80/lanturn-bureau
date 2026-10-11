@@ -5,3 +5,4 @@ dist
 
 # unrelated sibling project
 nard/
+*.tsbuildinfo

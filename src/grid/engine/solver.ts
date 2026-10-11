@@ -21,10 +21,26 @@
  *                   coverage pruning) used to count solutions — the ground
  *                   truth for uniqueness.
  */
-import type { Cell, Clue, Predicate, Puzzle } from '../types';
-import { indexCell } from './geometry';
+import type { Predicate } from '../types';
 import type { PosFn, PuzzleCtx } from './predicates';
-import { compilePredicate, isGlobalPredicate, makePuzzleCtx, predicatePeople } from './predicates';
+import { compilePredicate, isGlobalPredicate, predicatePeople } from './predicates';
+
+/**
+ * A global constraint that is not a clue predicate (variant rules such as
+ * "exactly one person had a clear sight line to the victim"). `f` is
+ * three-valued like a compiled predicate; `revise` (optional) is a sound
+ * domain filter returning -1 contradiction, 0 unchanged, 1 changed.
+ */
+export interface CustomRule {
+  f: PosFn;
+  revise?: (D: Domains, setDom: (q: number, list: number[]) => void) => number;
+}
+
+/** One constraint of a problem: a predicate owned by a person, or a custom global rule. */
+export type ProblemItem = { owner: number; pred: Predicate } | { owner: number; custom: CustomRule };
+
+/** Always-true placeholder predicate (in a corner or not). */
+const TAUTOLOGY: Predicate = { type: 'or', a: { type: 'corner', value: true }, b: { type: 'corner', value: false } };
 
 /** A clue compiled against one puzzle. */
 export interface CClue {
@@ -37,6 +53,8 @@ export interface CClue {
   pred: Predicate;
   /** unary clues: mask[cell] = 1 where the clue holds */
   mask: Uint8Array | null;
+  /** custom global rule (variant rules) */
+  custom?: CustomRule;
 }
 
 export interface Problem {
@@ -75,13 +93,20 @@ export function compileClue(ctx: PuzzleCtx, owner: number, pred: Predicate): CCl
   return { owner, deps: global ? [] : deps, global, unary, f, pred, mask };
 }
 
-export function makeProblem(ctx: PuzzleCtx, list: { owner: number; pred: Predicate }[]): Problem {
+export function compileItem(ctx: PuzzleCtx, it: ProblemItem): CClue {
+  if ('custom' in it) {
+    return { owner: it.owner, deps: [], global: true, unary: false, f: it.custom.f, pred: TAUTOLOGY, mask: null, custom: it.custom };
+  }
+  return compileClue(ctx, it.owner, it.pred);
+}
+
+export function makeProblem(ctx: PuzzleCtx, list: ProblemItem[]): Problem {
   const g = ctx.grid;
   const n = ctx.personIds.length;
   const rowAt = new Int8Array(g.size), colAt = new Int8Array(g.size);
   for (let c = 0; c < g.size; c++) { rowAt[c] = Math.floor(c / g.cols); colAt[c] = c % g.cols; }
   return {
-    ctx, n, clues: list.map((x) => compileClue(ctx, x.owner, x.pred)), rowAt, colAt,
+    ctx, n, clues: list.map((x) => compileItem(ctx, x)), rowAt, colAt,
     fullRows: n === g.rows, fullCols: n === g.cols,
   };
 }
@@ -185,9 +210,12 @@ export function propagate(prob: Problem, act: Uint8Array, D: Domains, dirty?: nu
   const supported = (cl: CClue, rest: number[], k: number): boolean => {
     if (k === rest.length) return cl.f(pos) === 1;
     const q = rest[k] as number;
+    const deps = cl.deps;
     for (const c of D[q] as number[]) {
       let clash = false;
-      for (let j = 0; j < pos.length; j++) {
+      // only the clue's own people are ever placed in pos here
+      for (let jj = 0; jj < deps.length; jj++) {
+        const j = deps[jj] as number;
         const pj = pos[j] as number;
         if (pj >= 0 && j !== q && (rowAt[pj] === rowAt[c] || colAt[pj] === colAt[c])) { clash = true; break; }
       }
@@ -201,10 +229,14 @@ export function propagate(prob: Problem, act: Uint8Array, D: Domains, dirty?: nu
   };
 
   /** -1 contradiction, 0 unchanged, 1 changed */
-  const reviseLocal = (cl: CClue): number => {
+  const reviseLocal = (cl: CClue, since: number): number => {
     let changed = 0;
     for (const v of cl.deps) {
       const rest = cl.deps.filter((x) => x !== v);
+      // arc revision is directional: v only loses support when another person of the clue changed
+      let otherChanged = false;
+      for (const q of rest) if ((changedAt[q] as number) > since) { otherChanged = true; break; }
+      if (!otherChanged) continue;
       if (rest.length >= 2) {
         let prod = 1;
         for (const q of rest) prod *= (D[q] as number[]).length;
@@ -255,6 +287,19 @@ export function propagate(prob: Problem, act: Uint8Array, D: Domains, dirty?: nu
       changed = 1;
       return true;
     };
+    if (cl.custom) {
+      if (cl.custom.revise) {
+        const r = cl.custom.revise(D, (q, list) => {
+          if (list.length !== (D[q] as number[]).length) { setDom(q, list); changed = 1; }
+        });
+        if (r < 0) return -1;
+      }
+      // people pinned to one cell must not already violate the rule
+      for (let q = 0; q < n; q++) pos[q] = (D[q] as number[]).length === 1 ? ((D[q] as number[])[0] as number) : -1;
+      const v = cl.f(pos);
+      pos.fill(-1);
+      return v === 0 ? -1 : changed;
+    }
     const p = cl.pred;
     if (p.type === 'aloneInRoom' || p.type === 'roomCount') {
       canBe.fill(0);
@@ -305,21 +350,29 @@ export function propagate(prob: Problem, act: Uint8Array, D: Domains, dirty?: nu
     return ok ? changed : -1;
   };
 
+  // active non-unary clues (unary ones live in the initial domains)
+  const live: number[] = [];
+  for (let ci = 0; ci < clues.length; ci++) if (act[ci] && !(clues[ci] as CClue).unary) live.push(ci);
   let progress = true;
+  let leStamp = -1;
   while (progress) {
     progress = false;
-    const le = lineExclusion(prob, D, setDom);
-    if (le < 0) return false;
-    for (let ci = 0; ci < clues.length; ci++) {
-      if (!act[ci]) continue;
+    if (leStamp !== stamp) {
+      const le = lineExclusion(prob, D, setDom);
+      if (le < 0) return false;
+      // the column pass can enable new row deductions (and vice versa): run to a joint fixpoint
+      if (le > 0) progress = true;
+      else leStamp = stamp;
+    }
+    for (const ci of live) {
       const cl = clues[ci] as CClue;
-      if (cl.unary) continue;
       let need = false;
       if (cl.global) need = stamp > (seenAt[ci] as number);
       else for (const d of cl.deps) if ((changedAt[d] as number) > (seenAt[ci] as number)) { need = true; break; }
       if (!need) continue;
+      const since = seenAt[ci] as number;
       seenAt[ci] = stamp;
-      const r = cl.global ? reviseGlobal(cl) : reviseLocal(cl);
+      const r = cl.global ? reviseGlobal(cl) : reviseLocal(cl, since);
       if (r < 0) return false;
       if (r > 0) progress = true;
     }
@@ -344,17 +397,20 @@ export function probe(prob: Problem, act: Uint8Array, D: Domains, probeMax: numb
     order.sort((a, b) => (D[a] as number[]).length - (D[b] as number[]).length);
     let progress = false;
     for (const p of order) {
+      const len = (D[p] as number[]).length;
+      if (len < 2 || len > probeMax) continue;
+      let removed = false;
       for (const c of (D[p] as number[]).slice()) {
         const Dc = cloneDomains(D);
         Dc[p] = [c];
         if (!propagate(prob, act, Dc, [p])) {
           D[p] = (D[p] as number[]).filter((x) => x !== c);
-          progress = true;
+          removed = true;
         }
       }
-      if (progress) {
+      if (removed) {
+        progress = true;
         if (!propagate(prob, act, D, [p])) return false;
-        break;
       }
     }
     if (!progress) return true;
@@ -448,26 +504,4 @@ export function search(prob: Problem, act: Uint8Array, limit: number): Int16Arra
   };
   rec(0);
   return results;
-}
-
-/** Public: count solutions of a puzzle under the given clues (early exit at `limit`). */
-export function countSolutions(
-  puzzle: Puzzle,
-  clues: Clue[],
-  limit = 2,
-): { count: number; first?: Record<string, Cell> } {
-  const ctx = makePuzzleCtx(puzzle);
-  const list: { owner: number; pred: Predicate }[] = [];
-  for (const cl of clues) {
-    const owner = ctx.personIndex.get(cl.personId);
-    if (owner !== undefined) list.push({ owner, pred: cl.predicate });
-  }
-  const prob = makeProblem(ctx, list);
-  const act = new Uint8Array(prob.clues.length).fill(1);
-  const sols = search(prob, act, limit);
-  const firstPos = sols[0];
-  if (!firstPos) return { count: 0 };
-  const first: Record<string, Cell> = {};
-  ctx.personIds.forEach((id, i) => { first[id] = indexCell(ctx.grid.cols, firstPos[i] as number); });
-  return { count: sols.length, first };
 }

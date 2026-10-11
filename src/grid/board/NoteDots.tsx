@@ -1,7 +1,7 @@
 import { memo, type JSX } from 'react';
 import { shade } from '../../components/avatar/color';
 import type { Cell, Person } from '../types';
-import { INK } from './sprites/common';
+const INK = '#2b2420';
 
 /**
  * A ~10 px "mini avatar": outfit-coloured disc with the person's skin + hair.

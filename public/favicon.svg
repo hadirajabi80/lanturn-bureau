@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 512 512">
+  
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FFB347" stop-opacity="0.55"/>
+      <stop offset="45%" stop-color="#FFB347" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#FFB347" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="brass" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#E7C27D"/>
+      <stop offset="55%" stop-color="#C9974A"/>
+      <stop offset="100%" stop-color="#7A5627"/>
+    </linearGradient>
+    <radialGradient id="glass" cx="50%" cy="62%" r="70%">
+      <stop offset="0%" stop-color="#FFF4D0"/>
+      <stop offset="40%" stop-color="#FFC764"/>
+      <stop offset="100%" stop-color="#B8641E"/>
+    </radialGradient>
+    <linearGradient id="flame" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFE7A3"/>
+      <stop offset="100%" stop-color="#FFFFFF"/>
+    </linearGradient>
+  </defs>
+  <clipPath id="tile"><rect width="512" height="512" rx="112"/></clipPath>
+  <rect width="512" height="512" rx="112" fill="#120E0B"/>
+  <g clip-path="url(#tile)"><g transform="translate(-30.720000000000027 -30.720000000000027) scale(1.12)">
+    
+  <g stroke="#C9974A" stroke-opacity="0.16" stroke-width="2"></g>
+  <g fill="none" stroke="#C9974A" stroke-opacity="0.62" stroke-width="9" stroke-linecap="square">
+    <path d="M64 208 V64 H208 M256 64 H448 V256 M448 304 V448 H304 M256 448 H64 V256"/>
+    <path d="M64 304 H160 M208 304 V448 M352 64 V160 H448 M352 208 V256"/>
+  </g>
+  
+    <circle cx="256" cy="236" r="230" fill="url(#glow)"/>
+    
+  <g>
+    <circle cx="256" cy="94" r="26" fill="none" stroke="url(#brass)" stroke-width="11"/>
+    <rect x="244" y="112" width="24" height="16" rx="3" fill="url(#brass)"/>
+    <path d="M214 126 H298 L330 162 H182 Z" fill="url(#brass)"/>
+    <rect x="198" y="160" width="116" height="172" rx="10" fill="url(#glass)"/>
+    <path d="M256 204 C276 238 288 260 281 281 C274 304 238 304 231 281 C224 260 236 238 256 204 Z" fill="url(#flame)" opacity="0.95"/>
+    <path d="M256 248 C264 262 268 272 264 282 C260 292 252 292 248 282 C244 272 248 262 256 248 Z" fill="#FFFFFF"/>
+    <rect x="198" y="160" width="116" height="172" rx="10" fill="none" stroke="url(#brass)" stroke-width="12"/>
+    <rect x="225" y="164" width="6" height="164" fill="#C9974A" opacity="0.85"/>
+    <rect x="281" y="164" width="6" height="164" fill="#C9974A" opacity="0.85"/>
+    <path d="M182 330 H330 L308 362 H204 Z" fill="url(#brass)"/>
+    <rect x="222" y="360" width="68" height="14" rx="4" fill="#7A5627"/>
+  </g>
+  </g></g>
+</svg>

@@ -14,6 +14,8 @@ export interface ZoomViewportProps {
   /** Fit-to-width size of the content (CSS px) at zoom 1. */
   baseWidth: number;
   baseHeight: number;
+  /** Control colours (skin tokens). */
+  ui?: { bg: string; fg: string; ring: string };
   children: ReactNode;
 }
 
@@ -22,7 +24,7 @@ export interface ZoomViewportProps {
  * (so the SVG stays crisp) inside a scroll box the size of the fit-to-width board.
  * Pinch with two fingers, or use the − / + pair; tap or double-tap the readout to reset.
  */
-export function ZoomViewport({ enabled, zoom, onZoom, baseWidth, baseHeight, children }: ZoomViewportProps): JSX.Element {
+export function ZoomViewport({ enabled, zoom, onZoom, baseWidth, baseHeight, ui, children }: ZoomViewportProps): JSX.Element {
   const boxRef = useRef<HTMLDivElement>(null);
   const prevZoom = useRef(zoom);
   /** Focal point (box-relative CSS px) to keep still across the next zoom change. */
@@ -74,8 +76,8 @@ export function ZoomViewport({ enabled, zoom, onZoom, baseWidth, baseHeight, chi
   };
 
   const zoomed = zoom > ZOOM_MIN + 0.001;
-  const btn =
-    'grid size-8 place-items-center rounded-full text-[#2b2724] transition-colors hover:bg-[#f3ede4] disabled:opacity-35 disabled:hover:bg-transparent';
+  const colors = ui ?? { bg: 'rgba(20,16,12,0.85)', fg: '#F1E6D2', ring: '#C9974A' };
+  const btn = 'grid size-8 place-items-center rounded-[8px] transition-colors hover:bg-white/10 disabled:opacity-35 disabled:hover:bg-transparent';
 
   return (
     <div>
@@ -98,7 +100,8 @@ export function ZoomViewport({ enabled, zoom, onZoom, baseWidth, baseHeight, chi
         <div style={{ width: baseWidth * zoom }}>{children}</div>
       </div>
       <div
-        className="ml-auto mt-1.5 flex w-fit items-center gap-0.5 rounded-full bg-white p-0.5 shadow-[0_6px_16px_-10px_rgb(70_45_20/0.5)] ring-1 ring-black/5"
+        className="ml-auto mt-1.5 flex w-fit items-center gap-0.5 rounded-[10px] p-0.5"
+        style={{ background: colors.bg, color: colors.fg, boxShadow: `inset 0 0 0 1px ${colors.ring}55, 0 8px 18px -10px rgb(0 0 0 / 0.7)` }}
         role="group"
         aria-label="Board zoom"
       >
@@ -107,7 +110,7 @@ export function ZoomViewport({ enabled, zoom, onZoom, baseWidth, baseHeight, chi
         </button>
         <button
           type="button"
-          className="h-8 min-w-[42px] rounded-full px-1 text-[12px] font-bold tabular-nums text-[#5b524a] hover:bg-[#f3ede4]"
+          className="h-8 min-w-[42px] rounded-[8px] px-1 font-mono text-[12px] font-semibold tabular-nums hover:bg-white/10"
           aria-label="Reset zoom"
           title="Tap or double-tap to fit the board"
           onClick={() => onZoom(ZOOM_MIN)}

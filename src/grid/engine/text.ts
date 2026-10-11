@@ -3,7 +3,7 @@
  * choice is seeded so a puzzle always reads the same. Rows/columns are 1-based
  * in prose with "top row / bottom row / left column / right column" at edges.
  */
-import type { FurnitureKind, KillerRule, Person, Predicate, Room } from '../types';
+import type { FurnitureKind, KillerRule, Person, Predicate, Room, Variant } from '../types';
 import { FURNITURE_LABEL, KILLER_RULE_TEXT } from '../types';
 import { hashSeed } from './rng';
 
@@ -219,4 +219,31 @@ export function clueText(p: Predicate, person: Person, ctx: TextCtx, variant?: n
 export function killerRuleText(rule: KillerRule, victim: { pronoun: 'he' | 'she' }): string {
   const pr = pronouns(victim);
   return KILLER_RULE_TEXT[rule.type].replace(/\{He\}/g, pr.He).replace(/\{him\}/g, pr.him).replace(/\{his\}/g, pr.his);
+}
+
+/**
+ * The victim's rule sentence for a scenario (brief §4). Double variants give
+ * each victim the sentence; the liar line of `liarDouble` goes on the first victim.
+ */
+export function victimRuleText(
+  variant: Variant,
+  victim: { pronoun: 'he' | 'she' },
+  opts: { poisonKind?: FurnitureKind; first?: boolean } = {},
+): string {
+  const pr = pronouns(victim);
+  const fill = (s: string): string => s.replace(/\{He\}/g, pr.He).replace(/\{him\}/g, pr.him).replace(/\{his\}/g, pr.his);
+  const alone = 'The victim. {He} was alone with the killer.';
+  const accomplice = 'The victim. Two people were in the room with {him}: the killer stood closer.';
+  const double = 'The victim. {He} was alone with {his} killer.';
+  switch (variant) {
+    case 'classic': return fill(alone);
+    case 'accomplice': return fill(accomplice);
+    case 'lockedRoom': return fill('The victim. {He} was alone behind a locked door. The killer was the only person in a room next to {his}.');
+    case 'poison': return `The victim. The poison was in the ${furnitureNoun(opts.poisonKind ?? 'cabinet')}. The killer was the only person beside one.`;
+    case 'sniper': return fill('The victim. Only the killer had a clear line of sight to {him}.');
+    case 'liar': return fill(`${alone} One suspect is lying — every word.`);
+    case 'double': return fill(double);
+    case 'liarDouble': return fill(opts.first === false ? double : `${double} One of the two killers is lying — every word.`);
+    case 'accompliceLiar': return fill(`${accomplice} The accomplice is lying — every word.`);
+  }
 }

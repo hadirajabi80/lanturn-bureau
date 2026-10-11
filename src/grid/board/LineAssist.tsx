@@ -1,6 +1,6 @@
 import { memo, type JSX } from 'react';
 import type { Cell } from '../types';
-import { INK } from './sprites/common';
+const INK = '#2b2420';
 
 export interface LineAssistProps {
   /** Unique prefix for SVG ids (one board per prefix). */

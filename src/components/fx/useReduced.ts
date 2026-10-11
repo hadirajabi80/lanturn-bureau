@@ -1,5 +1,4 @@
 import { useReducedMotion } from 'framer-motion';
-import { useGame } from '../../engine/store';
 
 function osPrefersReducedMotion(): boolean {
   return (
@@ -9,25 +8,12 @@ function osPrefersReducedMotion(): boolean {
   );
 }
 
-/**
- * True when the OS asks for reduced motion OR the player switched on "Reduce effects" in
- * settings. Every FX component consults this and degrades to an instant / static variant.
- */
+/** True when the OS asks for reduced motion. Every FX component degrades to a static variant then. */
 export function useReduced(): boolean {
-  const os = useReducedMotion() === true;
-  const setting = useGame((s) => s.settings.reducedFx);
-  return os || setting;
+  return useReducedMotion() === true;
 }
 
-/**
- * Non-hook check for imperative helpers (confetti, audio-adjacent code): OS preference OR the
- * persisted "Reduce effects" setting. Safe in SSR/tests.
- */
+/** Non-hook check for imperative helpers (confetti, audio-adjacent code). Safe in SSR/tests. */
 export function prefersReducedMotion(): boolean {
-  if (osPrefersReducedMotion()) return true;
-  try {
-    return useGame.getState().settings.reducedFx === true;
-  } catch {
-    return false;
-  }
+  return osPrefersReducedMotion();
 }

@@ -1,9 +1,9 @@
 import type { District } from './types';
 
 /**
- * The eight districts of Greywick. Each is a building with its own art direction,
+ * The eleven districts of Greywick. Each is a building with its own art direction,
  * room-carving layout, wall/sheet style, palette and ambience. ids are the engine seasonIds.
- * 30 cases per tier + 10 Mastermind = 130 cases per district, 1,040 total.
+ * 30 cases per tier + 10 Mastermind = 130 cases per district, 1,430 total (11 districts; IX–XI are bright 'light'-mood districts).
  */
 const PER_TIER = { easy: 30, medium: 30, hard: 30, extreme: 30, mastermind: 10 } as const;
 
@@ -111,6 +111,45 @@ export const DISTRICTS: District[] = [
     },
     facade: { shape: 'dome', floors: 3, windowsPerFloor: 6 },
     ambience: 'wind', icon: 'Telescope', casesPerTier: PER_TIER,
+  },
+  {
+    id: 'rosewater', number: 9, name: 'Rosewater Patisserie', kicker: 'District IX · Sugar Lane', mood: 'light',
+    blurb: 'Macarons in every colour, a tea garden in bloom, and a cake that went missing before the party.',
+    themeId: 'patisserie', layout: 'organic', wall: 'ribbon', sheet: 'gingham',
+    floors: ['checker', 'tile', 'wood', 'grass'],
+    furniture: ['table', 'chair', 'counter', 'stool', 'plant', 'cabinet', 'fridge', 'rug', 'sofa', 'piano'],
+    palette: {
+      bg: '#FFF1F5', panel: '#FFFFFF', ink: '#4A2433', muted: '#A07484', accent: '#FF6FA3', accent2: '#FFC857', danger: '#E5484D',
+      sheet: '#FFE6EE', wall: '#F78FB3', rooms: ['#FFD6E5', '#FFE9D6', '#E3F6E5', '#FDF3C7', '#EADCFF', '#D9F0FF', '#FFDDEE', '#F6EBDD'], glow: '#FFB3D1',
+    },
+    facade: { shape: 'cottage', floors: 3, windowsPerFloor: 5 },
+    ambience: 'musicbox', icon: 'Cake', casesPerTier: PER_TIER,
+  },
+  {
+    id: 'lacewing', number: 10, name: 'Lavender & Lace Boutique', kicker: 'District X · Petal Row', mood: 'light',
+    blurb: 'Silk, pearls and perfume. The fitting rooms keep secrets better than the seamstresses do.',
+    themeId: 'boutique', layout: 'corridor', wall: 'lace', sheet: 'watercolor',
+    floors: ['carpet', 'marble', 'wood', 'checker'],
+    furniture: ['armchair', 'sofa', 'rug', 'statue', 'cabinet', 'lamp', 'plant', 'suitcase', 'easel', 'bathtub'],
+    palette: {
+      bg: '#F7F1FF', panel: '#FFFFFF', ink: '#3B2A55', muted: '#8E7FAE', accent: '#A77BFF', accent2: '#FF9EC7', danger: '#E0475B',
+      sheet: '#FCF8FF', wall: '#C9A8FF', rooms: ['#EBDDFF', '#FFE1F0', '#DDF3F0', '#FFF0D9', '#E3E9FF', '#F7DDF7', '#E6F7DD', '#FDE7E7'], glow: '#D9C2FF',
+    },
+    facade: { shape: 'boutique', floors: 3, windowsPerFloor: 4 },
+    ambience: 'harp', icon: 'Gem', casesPerTier: PER_TIER,
+  },
+  {
+    id: 'candyfloss', number: 11, name: 'Cotton Candy Pier', kicker: 'District XI · The Boardwalk', mood: 'light',
+    blurb: 'Carousel music, sticky fingers and a prize goldfish that saw everything.',
+    themeId: 'carnival', layout: 'blocks', wall: 'candy', sheet: 'confetti',
+    floors: ['deck', 'sand', 'grass', 'checker'],
+    furniture: ['bench', 'stool', 'counter', 'trolley', 'crate', 'plant', 'barrel', 'lamp', 'statue', 'rug'],
+    palette: {
+      bg: '#EEFFF9', panel: '#FFFFFF', ink: '#23395B', muted: '#6E86A8', accent: '#FF5DA2', accent2: '#3EC6FF', danger: '#FF4D4D',
+      sheet: '#E6FFF6', wall: '#FF7EB6', rooms: ['#FFD3E8', '#C9F2FF', '#FFF3B0', '#D7FFD9', '#E5D4FF', '#FFE0C2', '#CFF7EE', '#FFD9F4'], glow: '#FFE066',
+    },
+    facade: { shape: 'carnival', floors: 2, windowsPerFloor: 8 },
+    ambience: 'calliope', icon: 'FerrisWheel', casesPerTier: PER_TIER,
   },
 ];
 

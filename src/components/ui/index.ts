@@ -7,7 +7,6 @@ export { Toaster, toast, useToasts, type ToastKind } from './Toast';
 export { ProgressRing, type ProgressRingProps } from './ProgressRing';
 export { Badge, CountDot, type BadgeProps, type BadgeTone } from './Badge';
 export { Tooltip, type TooltipProps } from './Tooltip';
-export { DynamicIcon, getIcon, KIND_META, KIND_ORDER } from './ClueIcon';
 export { useReducedFx, reducedFxNow } from './useReducedFx';
 export { RichText } from './RichText';
 export { AnimatedNumber } from './AnimatedNumber';

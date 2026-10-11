@@ -1,66 +1,55 @@
-import { memo, type ComponentType, type JSX } from 'react';
-import type { Furniture, FurnitureKind } from '../../types';
-import type { SpriteProps } from './common';
-import { Anchor, Bananas, Barrel, Bin, Coffin, Crate, Easel, Globe, Lamp, Plant, Safe, Statue, Suitcase, Trolley } from './props';
-import { Armchair, Bathtub, Bed, Bench, Chair, Rug, Sofa, Stool } from './seating';
-import { Bookshelf, Cabinet, Counter, Desk, Fireplace, Fridge, Piano, Table } from './tables';
+/**
+ * Furniture sprites - top-down architectural-plan furniture, restyled per district.
+ *
+ *   FurnitureSprite({ piece, cellSize, skin?, glowFilterId? })   positioned on the board grid
+ *   SPRITES[kind]({ w, h, style, palette, seed?, glowId? })      raw drawing in a w x h box (100 = one cell)
+ *   furnitureTitle(kind)                                          "Armchair", "Bananas"...
+ *   SpriteGallery                                                 dev: every kind x every style
+ *
+ * Layout: core/ (geometry + Pen), styles/ (one StyleDef per WallStyle), kinds/ (one file per family).
+ */
+import { memo, type JSX } from 'react';
+import { FURNITURE_LABEL, type Furniture, type FurnitureKind } from '../../types';
+import { hash } from './core/geom';
+import { KINDS, KIND_ORDER } from './kinds';
+import { drawSprite, skinFor, type SpriteProps } from './render';
 
-export type { SpriteProps } from './common';
 export { INK } from './common';
+export { STYLE_DEFS, WALL_STYLES } from './styles';
+export type { Material, StyleDef } from './styles';
+export { KINDS, KIND_ORDER } from './kinds';
+export { drawSprite, skinFor } from './render';
+export type { SpriteProps } from './render';
+export { SpriteGallery } from './SpriteGallery';
 
-interface SpriteDef {
-  C: ComponentType<SpriteProps>;
-  /** true: one drawing stretched over the whole multi-cell footprint; false: one copy per cell. */
-  stretch: boolean;
+/** One drawing function per kind (style-aware). */
+export const SPRITES = Object.fromEntries(
+  KIND_ORDER.map((k) => [k, (p: SpriteProps): JSX.Element => drawSprite(k, p)]),
+) as Record<FurnitureKind, (p: SpriteProps) => JSX.Element>;
+
+/** Display name of a kind ("Armchair", "Bananas"). */
+export function furnitureTitle(kind: FurnitureKind): string {
+  const a = FURNITURE_LABEL[kind]?.a ?? kind;
+  const noun = a.replace(/^(an?|some)\s+/i, '');
+  return noun.charAt(0).toUpperCase() + noun.slice(1);
 }
-
-/** One sprite component per FurnitureKind. */
-export const SPRITES: Record<FurnitureKind, SpriteDef> = {
-  chair: { C: Chair, stretch: false },
-  armchair: { C: Armchair, stretch: false },
-  sofa: { C: Sofa, stretch: true },
-  rug: { C: Rug, stretch: true },
-  bed: { C: Bed, stretch: true },
-  stool: { C: Stool, stretch: false },
-  bench: { C: Bench, stretch: true },
-  table: { C: Table, stretch: true },
-  desk: { C: Desk, stretch: true },
-  crate: { C: Crate, stretch: false },
-  barrel: { C: Barrel, stretch: false },
-  bin: { C: Bin, stretch: false },
-  plant: { C: Plant, stretch: false },
-  bananas: { C: Bananas, stretch: false },
-  piano: { C: Piano, stretch: true },
-  bookshelf: { C: Bookshelf, stretch: true },
-  fireplace: { C: Fireplace, stretch: true },
-  bathtub: { C: Bathtub, stretch: true },
-  lamp: { C: Lamp, stretch: false },
-  safe: { C: Safe, stretch: false },
-  statue: { C: Statue, stretch: false },
-  cabinet: { C: Cabinet, stretch: true },
-  fridge: { C: Fridge, stretch: true },
-  counter: { C: Counter, stretch: true },
-  trolley: { C: Trolley, stretch: false },
-  suitcase: { C: Suitcase, stretch: false },
-  anchor: { C: Anchor, stretch: false },
-  globe: { C: Globe, stretch: false },
-  easel: { C: Easel, stretch: false },
-  coffin: { C: Coffin, stretch: true },
-};
 
 export interface FurnitureSpriteProps {
   piece: Furniture;
   /** Size of one grid cell in the parent SVG's user units (the Board uses 100). */
   cellSize: number;
+  /** District id (e.g. 'neon'); a bare WallStyle also works. Default: Ashcombe (ink). */
+  skin?: string;
+  /** Optional SVG filter id (soft blur) for the neon bloom layer; only the 'neon' style emits glow. */
+  glowFilterId?: string;
 }
 
 /**
  * Draws a furniture piece positioned on the grid. Must be rendered inside an `<svg>`
  * whose user space has cells of `cellSize` units starting at (0,0).
  */
-function FurnitureSpriteImpl({ piece, cellSize }: FurnitureSpriteProps): JSX.Element | null {
-  const def = SPRITES[piece.kind];
-  if (!def || piece.cells.length === 0) return null;
+function FurnitureSpriteImpl({ piece, cellSize, skin, glowFilterId }: FurnitureSpriteProps): JSX.Element | null {
+  if (!KINDS[piece.kind] || piece.cells.length === 0) return null;
   let minR = Infinity;
   let minC = Infinity;
   let maxR = -Infinity;
@@ -73,24 +62,15 @@ function FurnitureSpriteImpl({ piece, cellSize }: FurnitureSpriteProps): JSX.Ele
   }
   let w = (maxC - minC + 1) * 100;
   let h = (maxR - minR + 1) * 100;
-  // Respect an explicit orientation for 2-cell pieces even if cells were listed oddly.
   if (piece.cells.length === 2 && piece.orient) {
     w = piece.orient === 'h' ? 200 : 100;
     h = piece.orient === 'v' ? 200 : 100;
   }
+  const { style, palette } = skinFor(skin);
   const s = cellSize / 100;
-  const { C } = def;
   return (
     <g transform={`translate(${minC * cellSize} ${minR * cellSize}) scale(${s})`} pointerEvents="none">
-      {def.stretch || piece.cells.length === 1 ? (
-        <C w={w} h={h} />
-      ) : (
-        piece.cells.map((cell) => (
-          <g key={`${cell.r},${cell.c}`} transform={`translate(${(cell.c - minC) * 100} ${(cell.r - minR) * 100})`}>
-            <C w={100} h={100} />
-          </g>
-        ))
-      )}
+      {drawSprite(piece.kind, { w, h, style, palette, seed: hash(piece.id), glowId: glowFilterId })}
     </g>
   );
 }
