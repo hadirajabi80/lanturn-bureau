@@ -42,6 +42,7 @@ export function PageShell({ title, kicker, back, backLabel = 'Back', right, chil
         className="sticky top-0 z-40 backdrop-blur-md"
         style={{
           background: 'color-mix(in srgb, var(--fp-bg) 72%, transparent)',
+          paddingTop: 'var(--safe-top)',
           boxShadow: 'inset 0 -1px 0 var(--fp-hair)',
         }}
       >

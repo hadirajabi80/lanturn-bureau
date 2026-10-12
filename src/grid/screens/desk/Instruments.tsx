@@ -245,7 +245,7 @@ export function Instruments(props: InstrumentsProps & { layout: 'column' | 'dock
     return (
       <nav
         aria-label="Instruments"
-        className="flex items-stretch gap-1 px-2 pb-[max(env(safe-area-inset-bottom),8px)] pt-2"
+        className="flex items-stretch gap-1 px-2 pb-[max(var(--safe-bottom),8px)] pt-2"
         style={{
           background: 'linear-gradient(180deg, color-mix(in srgb, var(--fp-panel) 92%, #000), var(--fp-panel))',
           boxShadow: '0 -1px 0 var(--fp-hair), 0 -14px 30px -18px var(--dk-shadow, rgb(0 0 0 / 0.9))',

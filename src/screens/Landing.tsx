@@ -36,7 +36,7 @@ export default function Landing() {
 
   return (
     <SkinProvider district="ashcombe">
-      <div className="relative isolate flex min-h-dvh flex-col overflow-hidden">
+      <div className="relative isolate flex min-h-dvh flex-col overflow-hidden pt-safe pb-safe">
         <DeskBackground />
 
         <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-4 pb-6 pt-16 text-center">

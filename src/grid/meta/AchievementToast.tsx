@@ -60,7 +60,7 @@ export function AchievementToast({ max = 3, duration = 4800, onShow }: Achieveme
   const visible = queue.slice(0, max);
   const node = (
     <div
-      className="pointer-events-none fixed right-3 top-3 flex w-[min(340px,calc(100vw-24px))] flex-col gap-2 sm:right-5 sm:top-5"
+      className="pointer-events-none fixed right-3 top-[calc(0.75rem+var(--safe-top))] flex w-[min(340px,calc(100vw-24px))] flex-col gap-2 sm:right-5 sm:top-[calc(1.25rem+var(--safe-top))]"
       style={{ zIndex: 8500 }}
       aria-live="polite"
     >

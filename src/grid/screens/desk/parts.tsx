@@ -210,7 +210,7 @@ export function Overlay({
           aria-label={label}
           data-desk-overlay
           className={clsx('fixed inset-0 z-[80] overflow-y-auto', className)}
-          style={{ background: backdrop }}
+          style={{ background: backdrop, paddingTop: 'var(--safe-top)', paddingBottom: 'var(--safe-bottom)' }}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}

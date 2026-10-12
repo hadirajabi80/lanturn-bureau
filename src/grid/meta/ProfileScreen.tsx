@@ -35,6 +35,7 @@ export function ProfileScreen({ backTo = '/plans' }: ProfileScreenProps) {
       style={{
         background: `radial-gradient(1200px 700px at 50% -10%, color-mix(in srgb, ${FP.accent2} 10%, transparent), transparent 60%), ${FP.bg}`,
         color: FP.ink,
+        paddingTop: 'var(--safe-top)',
         fontFamily: 'var(--font-body, Inter, system-ui, sans-serif)',
       }}
     >

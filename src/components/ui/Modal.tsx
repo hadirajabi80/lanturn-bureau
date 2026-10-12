@@ -111,7 +111,7 @@ function ModalInner({
   }, [id]);
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-end justify-center p-0 sm:items-center sm:p-6">
+    <div className="fixed inset-0 z-[80] flex items-end justify-center p-0 sm:items-center sm:p-6" style={{ paddingTop: 'var(--safe-top)', paddingBottom: 'var(--safe-bottom)' }}>
       <motion.div
         className="absolute inset-0 bg-[#05070b]/75 backdrop-blur-[3px]"
         initial={{ opacity: 0 }}

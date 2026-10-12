@@ -664,7 +664,7 @@ export function CasePlayer(props: CasePlayerProps) {
 
   const results =
     showResults && phase === 'solved' && lastResult && !resultsHidden ? (
-      <div className={clsx('fixed z-[70]', wide ? 'bottom-6 right-6 w-[380px]' : 'inset-x-2 bottom-2')}>
+      <div className={clsx('fixed z-[70]', wide ? 'bottom-6 right-6 w-[380px]' : 'inset-x-2 bottom-[calc(0.5rem+var(--safe-bottom))]')}>
         <ResultsCard
           result={lastResult}
           title={puzzle.title}
@@ -709,7 +709,7 @@ export function CasePlayer(props: CasePlayerProps) {
         view={ottoView}
         onApply={applyOtto}
         onDismiss={dismissOtto}
-        className={clsx('fixed z-[60]', wide ? 'bottom-6 left-1/2 w-[min(560px,46vw)] -translate-x-1/2' : 'inset-x-2 bottom-[88px]')}
+        className={clsx('fixed z-[60]', wide ? 'bottom-6 left-1/2 w-[min(560px,46vw)] -translate-x-1/2' : 'inset-x-2 bottom-[calc(88px+var(--safe-bottom))]')}
       />
       <LineUp puzzle={puzzle} open={lineupOpen && phase === 'accusing'} onClose={() => setLineupOpen(false)} onAccuse={onAccuse} burnEnabled={burnEnabled} />
       <ScenarioExplainer variant={variant} open={scenarioOpen} onClose={closeScenario} isNew={isNewVariant} />
@@ -759,7 +759,7 @@ export function CasePlayer(props: CasePlayerProps) {
   if (wide) {
     return (
       <DeskFrame district={district} lampFollow={settings.lampFollow}>
-        <div className="mx-auto flex h-dvh max-w-[2200px] flex-col px-4 pb-4 pt-3 2xl:px-8">
+        <div className="mx-auto flex h-dvh max-w-[2200px] flex-col px-4 pb-4 2xl:px-8" style={{ paddingTop: 'calc(0.75rem + var(--safe-top))' }}>
           <header className="flex shrink-0 items-center gap-3 pb-3">
             {backBtn}
             {titleBlock}
@@ -800,8 +800,8 @@ export function CasePlayer(props: CasePlayerProps) {
   // ─────────────── phone ───────────────
   return (
     <DeskFrame district={district} lampFollow={false}>
-      <div className="flex min-h-dvh flex-col pb-[96px]">
-        <header className="sticky top-0 z-30 flex items-center gap-1.5 px-2 py-2 backdrop-blur" style={{ background: 'color-mix(in srgb, var(--fp-bg) 82%, transparent)' }}>
+      <div className="flex min-h-dvh flex-col" style={{ paddingBottom: 'calc(96px + var(--safe-bottom))' }}>
+        <header className="sticky top-0 z-30 flex items-center gap-1.5 px-2 pb-2 backdrop-blur" style={{ background: 'color-mix(in srgb, var(--fp-bg) 82%, transparent)', paddingTop: 'calc(0.5rem + var(--safe-top))' }}>
           {backBtn}
           {titleBlock}
           {props.hud}
