@@ -12,10 +12,12 @@ export const SIZE_LADDER: Record<Tier, [number, number][]> = {
   hard: [[10, 7], [20, 8], [30, 9]],
   extreme: [[8, 9], [16, 10], [24, 11], [30, 12]],
   mastermind: [[4, 12], [7, 13], [10, 14]],
+  // Extra Extreme: 8, 9, 9, 10, 10, 11, 11, 12, 12, 12
+  ultra: [[1, 8], [3, 9], [5, 10], [7, 11], [10, 12]],
 };
 
 /** Cases per tier in every district. */
-export const CASES_PER_TIER: Record<Tier, number> = { easy: 30, medium: 30, hard: 30, extreme: 30, mastermind: 10 };
+export const CASES_PER_TIER: Record<Tier, number> = { easy: 30, medium: 30, hard: 30, extreme: 30, mastermind: 10, ultra: 10 };
 
 /**
  * Board size N (the map is N×N and holds N people) for case `index` (1-based)
@@ -84,7 +86,20 @@ const SCHEDULE: Record<Tier, Sched> = {
     special: [{ v: 'liarDouble', from: 1, w: 1.3 }, { v: 'accompliceLiar', from: 3, w: 1 }],
     pBase: [0.45, 0.3],
   },
+  // seeded (daily / custom) Extra Extreme; the district ladder uses ULTRA_ORDER
+  ultra: {
+    classicUntil: 0,
+    base: [{ v: 'classic', from: 1, w: 1.2 }, { v: 'accomplice', from: 1, w: 1 }],
+    special: [{ v: 'lockedRoom', from: 1, w: 1 }, { v: 'sniper', from: 1, w: 1 }, { v: 'liar', from: 1, w: 1 }, { v: 'double', from: 1, w: 1 }],
+    pBase: [0.5, 0.5],
+  },
 };
+
+/**
+ * Extra Extreme ladder (same in every district): half classic / accomplice,
+ * half twists — the lone liar and the double murder come late.
+ */
+const ULTRA_ORDER: Variant[] = ['classic', 'accomplice', 'sniper', 'classic', 'lockedRoom', 'accomplice', 'liar', 'classic', 'double', 'sniper'];
 
 const frac = (x: number): number => x - Math.floor(x);
 
@@ -104,6 +119,7 @@ function pickWeighted(list: { v: Variant; w: number }[], u: number): Variant {
  * variant glyph without generating); daily / custom cases pass a seed.
  */
 export function variantFor(tier: Tier, index: number, seed?: number): Variant {
+  if (tier === 'ultra' && seed === undefined && index >= 1 && index <= ULTRA_ORDER.length) return ULTRA_ORDER[index - 1] as Variant;
   const s = SCHEDULE[tier];
   const first = (s.base[0] as { v: Variant }).v;
   if (index <= s.classicUntil) return first;
@@ -127,8 +143,7 @@ export const VARIANT_MIN_SIZE: Record<Variant, number> = {
 
 /** Difficulty multiplier on par time per variant. */
 export const VARIANT_PAR: Record<Variant, number> = {
-  classic: 1, accomplice: 1.1, lockedRoom: 1.1, poison: 1.1, sniper: 1.15, liar: 1.35, double: 1.2, liarDouble: 1.5,
-  accompliceLiar: 1.45,
+  classic: 1, accomplice: 1.1, lockedRoom: 1.1, poison: 1.1, sniper: 1.15, liar: 1.35, double: 1.2, liarDouble: 1.5,  accompliceLiar: 1.45,
 };
 
 // ─────────────────────────── daily / weekly ───────────────────────────

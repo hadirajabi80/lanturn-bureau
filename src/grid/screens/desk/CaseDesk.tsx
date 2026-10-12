@@ -4,6 +4,7 @@ import { getDistrict } from '@/grid/skins/districts';
 import { parseTierParam } from '@/grid/ui';
 import { generatePuzzle } from './bridge';
 import { CasePlayer } from './CasePlayer';
+import { HEAVY_TIERS } from './genJob';
 import { DeskLoading, DeskMissing, useGeneratedPuzzle } from './loading';
 
 export function CaseDesk() {
@@ -14,11 +15,16 @@ export function CaseDesk() {
   const max = district && tier ? district.casesPerTier[tier] : 0;
   const valid = !!district && !!tier && Number.isInteger(n) && n >= 1 && n <= max;
   const key = valid ? `${district.id}-${tier}-${n}` : null;
-  const gen = useGeneratedPuzzle(key, () => (valid ? generatePuzzle(district.id, tier, n) : null));
+  const gen = useGeneratedPuzzle(
+    key,
+    () => (valid ? generatePuzzle(district.id, tier, n) : null),
+    valid && HEAVY_TIERS.has(tier) ? { kind: 'case', districtId: district.id, tier, n } : null,
+  );
 
   const rack = district && tier ? `/plans/d/${district.id}/${tier}` : district ? `/plans/d/${district.id}` : '/plans';
   if (!valid) return <DeskMissing message="No such case in the files." back={rack} backLabel="Back to the rack" />;
-  if (gen.status === 'loading') return <DeskLoading district={district} />;
+  if (gen.status === 'loading')
+    return <DeskLoading district={district} label={tier === 'ultra' ? 'Unsealing the attic…' : undefined} attic={tier === 'ultra'} />;
   if (gen.status === 'error') return <DeskMissing message={gen.error} back={rack} backLabel="Back to the rack" />;
   return (
     <CasePlayer

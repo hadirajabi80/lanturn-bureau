@@ -7,7 +7,7 @@ import { DISTRICTS } from '../skins/districts';
 import type { District } from '../skins/types';
 import type { Variant } from '../types';
 import { TIERS } from '../types';
-import { RANKS } from './xp';
+import { GAUNTLET_STAGES, RANKS } from './xp';
 import { DISTRICT_ACHIEVEMENT_ICONS, type Achievement, type AchievementIconName, type AchievementTier, type ProfileData } from './types';
 
 export const ALL_VARIANTS: Variant[] = ['classic', 'accomplice', 'lockedRoom', 'poison', 'sniper', 'liar', 'double', 'liarDouble', 'accompliceLiar'];
@@ -21,6 +21,30 @@ export const casesInDistrict = (d: Pick<District, 'casesPerTier'>): number =>
 
 /** Default catalogue size (kept for callers that don't have a District handy). */
 export const CASES_PER_DISTRICT = DISTRICTS.length ? casesInDistrict(DISTRICTS[0]) : 130;
+
+/** Extra Extreme catalogue ids (`<district>-ultra-<n>`, n within the district's ultra count). */
+const ULTRA_ID = /^(.+)-ultra-([0-9]+)$/;
+const ULTRA_COUNT: Record<string, number> = Object.fromEntries(DISTRICTS.map((d) => [d.id, d.casesPerTier.ultra ?? 0]));
+/** Total Extra Extreme cases in the catalogue (110 today). */
+export const ULTRA_CASES_TOTAL = DISTRICTS.reduce((s, d) => s + (d.casesPerTier.ultra ?? 0), 0);
+/** Most Extra Extreme cases in one district (10 today). */
+const ULTRA_PER_DISTRICT = Math.max(1, ...DISTRICTS.map((d) => d.casesPerTier.ultra ?? 0));
+
+/** Distinct Extra Extreme catalogue cases solved: per district and in total. */
+export function ultraSolved(p: ProfileData): { perDistrict: Record<string, number>; total: number } {
+  const perDistrict: Record<string, number> = {};
+  let total = 0;
+  for (const id of Object.keys(p.solvedIds)) {
+    const m = ULTRA_ID.exec(id);
+    if (!m) continue;
+    const d = m[1] as string;
+    const k = Number(m[2]);
+    if (!(k >= 1 && k <= (ULTRA_COUNT[d] ?? 0))) continue;
+    perDistrict[d] = (perDistrict[d] ?? 0) + 1;
+    total++;
+  }
+  return { perDistrict, total };
+}
 
 /** Flavour titles for "District Complete"; unknown/new districts fall back to "<name>: Closed". */
 const DISTRICT_TITLES: Record<string, string> = {
@@ -84,11 +108,22 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'big-plans', title: 'Big Plans', description: 'Solve a 14×14 plan.', icon: 'Ruler', tier: 'gold', progress: (p) => n(p.counters.maxSize >= 14 ? 1 : 0, 1) },
   { id: 'mastermind', title: 'Mastermind', description: 'Solve a case on the roof (Mastermind tier).', icon: 'Crown', tier: 'gold', progress: (p) => n(p.counters.byTier.mastermind ?? 0, 1) },
   { id: 'mastermind-10', title: 'Roof Regular', description: 'Solve 10 Mastermind cases.', icon: 'Gem', tier: 'platinum', progress: (p) => n(p.counters.byTier.mastermind ?? 0, 10) },
-  { id: 'every-floor', title: 'Every Floor', description: 'Solve a case on every floor, Rookie to Mastermind.', icon: 'Layers', tier: 'silver', progress: (p) => n(TIERS.filter((t) => (p.counters.byTier[t] ?? 0) > 0).length, TIERS.length) },
+  { id: 'every-floor', title: 'Every Floor', description: 'Solve a case on every floor, Rookie to the sealed attic.', icon: 'Layers', tier: 'silver', progress: (p) => n(TIERS.filter((t) => (p.counters.byTier[t] ?? 0) > 0).length, TIERS.length) },
+  // ── the sealed attic (Extra Extreme) ──
+  { id: 'attic-dweller', title: 'Attic Dweller', description: 'Solve an Extra Extreme case in the sealed attic.', icon: 'KeyRound', tier: 'gold', progress: (p) => n(p.counters.byTier.ultra ?? 0, 1) },
+  {
+    id: 'sealed-shut', title: 'Sealed Shut', description: `Solve all ${ULTRA_PER_DISTRICT} Extra Extreme cases in one district.`, icon: 'LockKeyhole', tier: 'platinum',
+    progress: (p) => n(Math.max(0, ...Object.values(ultraSolved(p).perDistrict)), ULTRA_PER_DISTRICT),
+  },
+  { id: 'no-coordinates', title: 'No Coordinates Needed', description: 'Solve 20 Extra Extreme cases.', icon: 'MapPinOff', tier: 'platinum', progress: (p) => n(p.counters.byTier.ultra ?? 0, 20) },
+  {
+    id: 'grand-attic', title: 'Grand Attic', description: `Solve all ${ULTRA_CASES_TOTAL} Extra Extreme cases.`, icon: 'Skull', tier: 'platinum',
+    progress: (p) => n(ultraSolved(p).total, ULTRA_CASES_TOTAL),
+  },
   { id: 'grand-tour', title: 'Grand Tour', description: `Solve a case in all ${DISTRICTS.length} districts.`, icon: 'Map', tier: 'silver', progress: (p) => n(DISTRICTS.filter((d) => (p.counters.byDistrict[d.id] ?? 0) > 0).length, DISTRICTS.length) },
 
   // ── modes ──
-  { id: 'gauntlet-survivor', title: 'Gauntlet Survivor', description: 'Clear all 7 floors of the Gauntlet.', icon: 'Shield', tier: 'gold', progress: (p) => n(p.gauntletBest, 7) },
+  { id: 'gauntlet-survivor', title: 'Gauntlet Survivor', description: `Clear all ${GAUNTLET_STAGES} floors of the Gauntlet.`, icon: 'Shield', tier: 'gold', progress: (p) => n(p.gauntletBest, GAUNTLET_STAGES) },
   { id: 'blitz-10', title: 'Blitz 10', description: 'Close 10 cases in a single Blitz run.', icon: 'Timer', tier: 'gold', progress: (p) => n(p.blitzBest, 10) },
   { id: 'weekly', title: 'Weekly Mastermind', description: 'Solve a Weekly Mastermind case.', icon: 'Gavel', tier: 'gold', progress: (p) => n(p.counters.byMode.weekly ?? 0, 1) },
 

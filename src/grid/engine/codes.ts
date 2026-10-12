@@ -1,7 +1,7 @@
 /**
  * Case codes (brief §6): `ASH-I-12`, `DAILY-20261011`, `WEEK-2026W41`,
  * custom `C-<district3>-<tier1>-<size>-<variant>-<seed>`.
- * Tier letters: R D I C M (Rookie, Detective, Inspector, Chief, Mastermind);
+ * Tier letters: R D I C M U (Rookie, Detective, Inspector, Chief, Mastermind, Extra Extreme);
  * legacy E / H / X (easy / hard / extreme) are accepted when parsing.
  */
 import type { District } from '../skins/types';
@@ -21,8 +21,11 @@ export const DISTRICT_CODES: Record<string, string> = Object.fromEntries(
 );
 const CODE_TO_DISTRICT: Record<string, string> = Object.fromEntries(Object.entries(DISTRICT_CODES).map(([k, v]) => [v, k]));
 
-export const TIER_LETTER: Record<Tier, string> = { easy: 'R', medium: 'D', hard: 'I', extreme: 'C', mastermind: 'M' };
-const LETTER_TO_TIER: Record<string, Tier> = { R: 'easy', D: 'medium', I: 'hard', C: 'extreme', M: 'mastermind', E: 'easy', H: 'hard', X: 'extreme' };
+export const TIER_LETTER: Record<Tier, string> = { easy: 'R', medium: 'D', hard: 'I', extreme: 'C', mastermind: 'M', ultra: 'U' };
+/** X stays legacy extreme; Extra Extreme ('ultra') is U. */
+const LETTER_TO_TIER: Record<string, Tier> = {
+  R: 'easy', D: 'medium', I: 'hard', C: 'extreme', M: 'mastermind', U: 'ultra', E: 'easy', H: 'hard', X: 'extreme',
+};
 
 const VARIANTS: Variant[] = ['classic', 'accomplice', 'lockedRoom', 'poison', 'sniper', 'liar', 'double', 'liarDouble', 'accompliceLiar'];
 

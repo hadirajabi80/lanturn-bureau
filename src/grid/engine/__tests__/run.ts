@@ -4,6 +4,8 @@
  * Default run: every district × tier × (first 6 + last 2 cases), 3 daily cases,
  * 1 weekly case, 10 custom cases, code round trips. `npm run grid:test -- --all`
  * generates every case of every district. Exits 1 on any failure.
+ * Extra Extreme ('ultra'): first 3 cases per district by default, all 10 with --all; checks the
+ * docs/EXTRA-EXTREME.md contract (no coordinate predicates, difficultyReport, every clue necessary).
  */
 import type { Cell, Puzzle, Tier, Variant } from '../../types';
 import { OCCUPIABLE, TIERS, cellKey } from '../../types';
@@ -13,8 +15,9 @@ import {
   generatePuzzleUncached, generatePuzzle, killerFor, culpritsFor, puzzleTitle, isKillerRuleClue, makePuzzleCtx,
   compilePredicate, deduceWorlds, variantFor, codeFor, parseCode, uncached, baseRuleItems, compileItem, ruleSpecOf,
   hypothesisItems, toPositions, isLiarVariant, isAccompliceVariant, isDoubleVariant, CASES_PER_TIER, tierSizeRange,
-  VARIANT_MIN_SIZE, isoWeekOf, genStats,
+  VARIANT_MIN_SIZE, isoWeekOf, genStats, difficultyReport, puzzleWorlds, deduceDeep, ULTRA_K1, ULTRA_K2, BANNED_ULTRA,
 } from '../index';
+import type { DifficultyReport } from '../index';
 import type { CustomOptions } from '../index';
 
 const ALL = process.argv.includes('--all');
@@ -26,15 +29,19 @@ const warnings: string[] = [];
 /** generation / solve time per board size N */
 const genBySize: Record<number, number[]> = {};
 const solveBySize: Record<number, number[]> = {};
-const variantByTier: Record<Tier, Record<string, number>> = { easy: {}, medium: {}, hard: {}, extreme: {}, mastermind: {} };
-const cluesPerSuspect: Record<Tier, number[]> = { easy: [], medium: [], hard: [], extreme: [], mastermind: [] };
+const variantByTier: Record<Tier, Record<string, number>> = { easy: {}, medium: {}, hard: {}, extreme: {}, mastermind: {}, ultra: {} };
+const cluesPerSuspect: Record<Tier, number[]> = { easy: [], medium: [], hard: [], extreme: [], mastermind: [], ultra: [] };
+/** Extra Extreme generation times per N (separate budget) and difficulty reports (ultra vs mastermind) */
+const genUltraBySize: Record<number, number[]> = {};
+const reports: Partial<Record<Tier, DifficultyReport[]>> = {};
+const ultraSamples: Puzzle[] = [];
 const samples: Partial<Record<Variant, Puzzle>> = {};
 let victimExtraClues = 0;
 let bruteChecked = 0;
 const layoutFallbacks: string[] = [];
 
 /** probe depth used by the generator at the top of each tier ramp (the deducibility check may not be weaker) */
-const PROBE: Record<Tier, number> = { easy: 0, medium: 2, hard: 3, extreme: 4, mastermind: 4 };
+const PROBE: Record<Tier, number> = { easy: 0, medium: 2, hard: 3, extreme: 4, mastermind: 4, ultra: ULTRA_K1 };
 
 const sameCell = (a: Cell | undefined, b: Cell | undefined): boolean => !!a && !!b && a.r === b.r && a.c === b.c;
 
@@ -188,7 +195,13 @@ function checkPuzzle(p: Puzzle, expect: { size?: number; variant?: Variant } = {
   }
 
   // ── human deducibility: one world solved, every other liar hypothesis contradicts
-  const worlds = deduceWorlds(p, PROBE[p.tier]);
+  //    (Extra Extreme: the depth-2 what-if engine)
+  const worlds = p.tier === 'ultra'
+    ? puzzleWorlds(p).map((w) => {
+      const r = deduceDeep(w.prob, w.act, ULTRA_K1, ULTRA_K2);
+      return { liar: w.liar === null ? null : (ctx.personIds[w.liar] as string), status: r.status };
+    })
+    : deduceWorlds(p, PROBE[p.tier]);
   const solved = worlds.filter((w) => w.status === 'solved');
   if (solved.length !== 1) fail(id, `deduction: ${solved.length} solved worlds`);
   else if (solved[0]?.liar !== (p.liarId ?? null)) fail(id, 'deduction solved the wrong liar world');
@@ -248,6 +261,37 @@ function checkPuzzle(p: Puzzle, expect: { size?: number; variant?: Variant } = {
 
   variantByTier[p.tier][variant] = (variantByTier[p.tier][variant] ?? 0) + 1;
   samples[variant] ??= p;
+  if (p.tier === 'ultra') checkUltra(p);
+}
+
+/** docs/EXTRA-EXTREME.md §1 + §3 */
+function checkUltra(p: Puzzle): void {
+  const id = p.id;
+  const rep = difficultyReport(p);
+  (reports.ultra ??= []).push(rep);
+  if (!rep.ok) fail(id, `contract: ${rep.problems.join('; ')}`);
+  // no coordinate predicates anywhere (the rule sentence carries no position)
+  const walk = (pr: Puzzle['clues'][number]['predicate'], out: string[]): string[] => {
+    out.push(pr.type);
+    if (pr.type === 'or' || pr.type === 'ifThen' || pr.type === 'xor' || pr.type === 'and') { walk(pr.a, out); walk(pr.b, out); }
+    if (pr.type === 'not') walk(pr.p, out);
+    return out;
+  };
+  p.clues.forEach((cl, i) => {
+    if (isKillerRuleClue(p, i)) return;
+    const bad = walk(cl.predicate, []).filter((t) => BANNED_ULTRA.has(t as never));
+    if (bad.length) fail(id, `banned predicate ${bad.join(',')} in "${cl.text}"`);
+    // room names ("Noodle Row") are names, not coordinates
+    const plain = p.rooms.reduce((t, r) => t.split(r.name).join(''), cl.text);
+    if (/\b(row|column|corner|edge)\b/i.test(plain)) fail(id, `coordinate wording "${cl.text}"`);
+  });
+  // every clue matters: removing any sentence breaks uniqueness (over every liar reading)
+  p.clues.forEach((cl, i) => {
+    if (isKillerRuleClue(p, i)) return;
+    const rest = p.clues.filter((_, j) => j !== i);
+    if (countSolutions(p, rest, 2).count < 2) fail(id, `clue not necessary: "${cl.text}"`);
+  });
+  if (ultraSamples.length < 40) ultraSamples.push(p);
 }
 
 /** Enumerate every one-per-row/column placement; count those where some liar reading (or none) satisfies everything. */
@@ -309,6 +353,7 @@ const ladder: Record<Tier, [number, number][]> = {
   hard: [[1, 7], [10, 7], [11, 8], [20, 8], [21, 9], [30, 9]],
   extreme: [[1, 9], [8, 9], [9, 10], [16, 10], [17, 11], [24, 11], [25, 12], [30, 12]],
   mastermind: [[1, 12], [4, 12], [5, 13], [7, 13], [8, 14], [10, 14]],
+  ultra: [[1, 8], [2, 9], [3, 9], [4, 10], [5, 10], [6, 11], [7, 11], [8, 12], [9, 12], [10, 12]],
 };
 for (const tier of TIERS) for (const [i, n] of ladder[tier]) if (gridSizeFor(tier, i) !== n) fail('gridSizeFor', `${tier} ${i} → ${gridSizeFor(tier, i)}, want ${n}`);
 for (let i = 1; i <= 30; i++) if (variantFor('easy', i) !== 'classic') fail('variantFor', `easy ${i} not classic`);
@@ -323,18 +368,19 @@ const tStart = performance.now();
 function timed(make: () => Puzzle): Puzzle {
   const t0 = performance.now();
   const p = make();
-  (genBySize[p.rows] ??= []).push(performance.now() - t0);
+  ((p.tier === 'ultra' ? genUltraBySize : genBySize)[p.rows] ??= []).push(performance.now() - t0);
   total++;
   return p;
 }
 for (const d of DISTRICTS) {
   for (const tier of TIERS) {
     const n = d.casesPerTier[tier] ?? CASES_PER_TIER[tier];
-    const idx = ALL ? Array.from({ length: n }, (_, i) => i + 1) : [1, 2, 3, 4, 5, 6, n - 1, n];
+    const idx = ALL ? Array.from({ length: n }, (_, i) => i + 1) : tier === 'ultra' ? [1, 2, 3] : [1, 2, 3, 4, 5, 6, n - 1, n];
     for (const i of idx) {
       const id = `${d.id}-${tier}-${i}`;
       try {
         const p = timed(() => generatePuzzleUncached(d.id, tier, i));
+        if (tier === 'mastermind' && i <= 4) (reports.mastermind ??= []).push(difficultyReport(p));
         checkPuzzle(p, { size: gridSizeFor(tier, i), variant: variantFor(tier, i) });
         if (p.layout !== d.layout) layoutFallbacks.push(`${id} ${p.rows} ${d.layout}→${p.layout}`);
         if (p.title !== puzzleTitle(d.id, tier, i)) fail(id, 'title differs from puzzleTitle()');
@@ -376,6 +422,7 @@ const customs: CustomOptions[] = [
   { districtId: 'hollowmere', tier: 'hard', size: 6, variant: 'liar', seed: 5 },
   { districtId: 'express', tier: 'extreme', size: 9, variant: 'double', seed: 123456 },
   { districtId: 'frostmere', tier: 'mastermind', size: 11, variant: 'accompliceLiar', seed: 31337 },
+  { districtId: 'candyfloss', tier: 'ultra', size: 9, variant: 'sniper', seed: 4242 },
   { districtId: DISTRICTS[DISTRICTS.length - 1]?.id ?? 'ashcombe', tier: 'medium', size: 5, variant: 'liarDouble', seed: 8 },
   { districtId: DISTRICTS[(DISTRICTS.length - 2 + DISTRICTS.length) % DISTRICTS.length]?.id ?? 'neon', tier: 'easy', size: 3, variant: 'classic', seed: 77 },
 ];
@@ -392,10 +439,10 @@ for (const o of customs) {
     fail(label, `threw ${(e as Error).message}`);
   }
 }
-for (const bad of ['', 'XYZ-R-1', 'ASH-Q-3', 'ASH-R-31', 'ASH-M-11', 'DAILY-20261340', 'WEEK-2026W60', 'C-ASH-R-3-classic-1', 'C-ASH-R-6-banana-1']) {
+for (const bad of ['', 'XYZ-R-1', 'ASH-Q-3', 'ASH-R-31', 'ASH-M-11', 'ASH-U-11', 'ASH-U-0', 'DAILY-20261340', 'WEEK-2026W60', 'C-ASH-R-3-classic-1', 'C-ASH-R-6-banana-1']) {
   if (parseCode(bad)) fail('parseCode', `accepted "${bad}"`);
 }
-for (const [code, id] of [['ash-h-12', 'ashcombe-hard-12'], ['NEO-X-30', 'neon-extreme-30'], [' exp-i-4 ', 'express-hard-4'], ['FRO-M-2', 'frostmere-mastermind-2']] as const) {
+for (const [code, id] of [['ash-h-12', 'ashcombe-hard-12'], ['NEO-X-30', 'neon-extreme-30'], [' exp-i-4 ', 'express-hard-4'], ['FRO-M-2', 'frostmere-mastermind-2'], ['ash-u-3', 'ashcombe-ultra-3'], ['NEO-X-3', 'neon-extreme-3']] as const) {
   const r = parseCode(code);
   if (!r || r.kind !== 'case') fail('parseCode', `rejected "${code}"`);
   else if (generatePuzzle(r.puzzle().seasonId, r.puzzle().tier, r.puzzle().index).id !== id) fail('parseCode', `"${code}" → ${r.puzzle().id}`);
@@ -433,6 +480,43 @@ console.log('\nclues per suspect (avg / max):');
 for (const tier of TIERS) {
   const xs = cluesPerSuspect[tier];
   if (xs.length) console.log(`  ${pad(tier, 11)}${avg(xs).toFixed(2)} / ${Math.max(...xs)}`);
+}
+// ── Extra Extreme
+console.log(`\nExtra Extreme generation (ms, budget: typical ≤ 1500 on 12×12):`);
+for (const size of Object.keys(genUltraBySize).map(Number).sort((a, b) => a - b)) {
+  const gs = genUltraBySize[size] as number[];
+  const sorted = [...gs].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)] ?? 0;
+  console.log(`  ${pad(`${size}×${size}`, 9)}n ${pad(String(gs.length), 4)}avg ${pad(avg(gs).toFixed(0), 7)}median ${pad(median.toFixed(0), 7)}max ${Math.max(...gs).toFixed(0)}`);
+  if (size === 12 && median > 1500) warnings.push(`ultra 12×12: median ${median.toFixed(0)} ms over 1500 ms`);
+  if (median > 6000) fail(`ultra generator ${size}×${size}`, `median ${median.toFixed(0)} ms`);
+}
+const FAMS = ['sight', 'company', 'neighbours', 'order', 'distance', 'furniture', 'rooms', 'conditionals', 'eitherOr', 'negatives', 'coordinates'];
+console.log(`\ndifficulty (difficultyReport) — ultra vs mastermind:`);
+console.log(`  ${pad('tier', 12)}${pad('n', 5)}${pad('clues', 7)}${pad('rel%', 6)}${pad('whatIf', 8)}${pad('depth2', 8)}${pad('maxDepth', 9)}${pad('fam', 5)}★fam`);
+for (const t of ['mastermind', 'ultra'] as Tier[]) {
+  const rs = reports[t] ?? [];
+  if (!rs.length) continue;
+  const a = (fn: (r: DifficultyReport) => number): string => avg(rs.map(fn)).toFixed(1);
+  console.log(`  ${pad(t, 12)}${pad(String(rs.length), 5)}${pad(a((r) => r.clues), 7)}${pad(a((r) => r.relationalPct), 6)}${pad(a((r) => r.whatIf), 8)}`
+    + `${pad(a((r) => r.whatIfDepth2), 8)}${pad(a((r) => r.maxDepth), 9)}${pad(a((r) => r.families.length), 5)}${a((r) => r.starFamilies.length)}`);
+}
+console.log(`  families used (share of cases):\n  ${pad('', 12)}${FAMS.map((x) => pad(x.slice(0, 10), 11)).join('')}`);
+for (const t of ['mastermind', 'ultra'] as Tier[]) {
+  const rs = reports[t] ?? [];
+  if (rs.length) console.log(`  ${pad(t, 12)}${FAMS.map((x) => pad(`${Math.round((100 * rs.filter((r) => r.families.includes(x as never)).length) / rs.length)}%`, 11)).join('')}`);
+}
+const starCount: Record<string, number> = {};
+for (const r of reports.ultra ?? []) for (const t of r.starTypes) starCount[t] = (starCount[t] ?? 0) + 1;
+console.log(`  ★ predicates in ultra cases: ${Object.entries(starCount).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(' · ')}`);
+if (VERBOSE || process.env.ULTRA_SAMPLES) {
+  for (const p of ultraSamples.slice(0, Number(process.env.ULTRA_SAMPLES ?? 6) || 6)) {
+    console.log(`\n── ${p.id} "${p.title}" ${p.rows}×${p.cols} ${p.variant}${p.liarId ? ` liar=${p.liarId}` : ''}`);
+    for (const person of p.people) {
+      const lines = p.clues.filter((c) => c.personId === person.id).map((c) => c.text).join(' ');
+      console.log(`  ${pad(person.name + (person.isVictim ? ' (victim)' : ''), 22)}${lines}`);
+    }
+  }
 }
 console.log(`victim position clues (beyond the rule sentence): ${victimExtraClues} across ${total} puzzles`);
 console.log(`brute-force cross-checked: ${bruteChecked} boards with ≤ 5 people`);

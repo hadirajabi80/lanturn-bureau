@@ -10,6 +10,7 @@ import type { Tier } from '@/grid/types';
 import { BrassButton, PageShell, SkinProvider } from '@/grid/ui';
 import { generatePuzzle } from '../desk/bridge';
 import { CasePlayer } from '../desk/CasePlayer';
+import { HEAVY_TIERS } from '../desk/genJob';
 import { DeskLoading, DeskMissing, useGeneratedPuzzle } from '../desk/loading';
 import { DistrictPicker, Section, TierPicker } from './shared';
 
@@ -24,12 +25,15 @@ export function ZenScreen() {
     setPick({ district: d, tier: t, n: 1 + Math.floor(Math.random() * max), nonce: Date.now() });
   };
 
-  const gen = useGeneratedPuzzle(pick ? `${pick.district}-${pick.tier}-${pick.n}-${pick.nonce}` : null, () =>
-    pick ? generatePuzzle(pick.district, pick.tier, pick.n) : null,
+  const gen = useGeneratedPuzzle(
+    pick ? `${pick.district}-${pick.tier}-${pick.n}-${pick.nonce}` : null,
+    () => (pick ? generatePuzzle(pick.district, pick.tier, pick.n) : null),
+    pick && HEAVY_TIERS.has(pick.tier) ? { kind: 'case', districtId: pick.district, tier: pick.tier, n: pick.n } : null,
   );
 
   if (pick) {
-    if (gen.status === 'loading') return <DeskLoading district={getDistrict(pick.district)} label="Brewing tea, unrolling a plan…" />;
+    if (gen.status === 'loading')
+      return <DeskLoading district={getDistrict(pick.district)} label="Brewing tea, unrolling a plan…" attic={pick.tier === 'ultra'} />;
     if (gen.status === 'error') return <DeskMissing message={gen.error} back="/plans/zen" backLabel="Back to Zen" />;
     return (
       <CasePlayer

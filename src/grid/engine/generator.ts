@@ -22,14 +22,16 @@ import { DISTRICTS, getDistrict } from '../skins/districts';
 import type {
   Furniture, FurnitureKind, KillerRule, LayoutStyle, Person, Predicate, Puzzle, Room, Theme, Tier, Variant,
 } from '../types';
-import { OCCUPIABLE, TIERS } from '../types';
+import { OCCUPIABLE, TIERS, VARIANTS_BY_TIER } from '../types';
 import type { GridCtx } from './geometry';
 import { colOf, diagAdjacent, indexCell, isCorner, isEdge, lineHasBlocker, lineOfSight, manhattan, rowOf } from './geometry';
 import { carveRooms } from './layouts';
 import { CAST } from './people';
 import { killerRulePredicate } from './play';
 import type { PuzzleCtx } from './predicates';
-import { makePuzzleCtx } from './predicates';
+import { makePuzzleCtx, predicatePeople } from './predicates';
+import { ULTRA_K1, ULTRA_K2, atomsOf, difficultyReport, familiesOf, isRelational, starFamiliesOf } from './difficulty';
+import { kindDistance, largestRoomWith, roomAllOccupiable, roomsTouching, seesKindMask } from './extra';
 import type { Rng } from './rng';
 import { hashSeed, mulberry32, weightedIndex } from './rng';
 import type { RuleSpec } from './rules';
@@ -38,7 +40,9 @@ import {
   negatePred,
 } from './rules';
 import type { CClue, Domains, Problem } from './solver';
-import { allSingle, cloneDomains, compileItem, deduce, initialDomains, makeProblem, probe, propagate, search } from './solver';
+import {
+  allSingle, cloneDomains, compileItem, deduce, deduceDeep, gradedSolve, initialDomains, makeProblem, probe, propagate, search, searchMACBounded,
+} from './solver';
 import { clueText, victimRuleText } from './text';
 import type { RoomRole } from './themes';
 import { GENERIC_ROLE_NAMES, LEGACY_SEASON_IDS, ROLE_NAMES, THEMES } from './themes';
@@ -83,6 +87,13 @@ const MEDIUM_TYPES: PType[] = [...EASY_TYPES, 'notInRoom', 'edge', 'onNoFurnitur
 const HARD_TYPES: PType[] = [...MEDIUM_TYPES, 'differentRoomFrom', 'besidePerson', 'notBesidePerson', 'aloneInRoom',
   'roomCount', 'distance', 'roomHasFurniture'];
 const EXTREME_TYPES: PType[] = [...HARD_TYPES, 'lineOfSight', 'or', 'roomSizeCmp'];
+/** Extra Extreme: nothing that names a row, a column or the map's frame (docs/EXTRA-EXTREME.md §1). */
+const ULTRA_TYPES: PType[] = ['inRoom', 'notInRoom', 'onFurniture', 'notOnFurniture', 'onAnyFurniture', 'onNoFurniture',
+  'besideFurniture', 'notBesideFurniture', 'besideAnyFurniture', 'notBesideAnyFurniture', 'sameRoomAs', 'differentRoomFrom',
+  'besidePerson', 'notBesidePerson', 'dirOf', 'distance', 'aloneInRoom', 'roomCount', 'roomHasFurniture', 'lineOfSight',
+  'seeCount', 'seenByNobody', 'crowdedThan', 'onlyOnFurnitureInRoom', 'noDiagonalNeighbour', 'closerToKindThan',
+  'closestToKind', 'roomAllOccupiable', 'roomHasButNot', 'largestRoomWith', 'roomTouches', 'canSeeKind', 'cannotSeeKind',
+  'ifThen', 'xor'];
 
 const TIER_SPEC: Record<Tier, TierSpec> = {
   easy: {
@@ -110,6 +121,12 @@ const TIER_SPEC: Record<Tier, TierSpec> = {
     extraClue: 0.55, par: 900, refPeople: 13,
     weights: { direct: 0.7, semi: 1.1, neg: 1.2, rel: 2.6, relNeg: 1.5, global: 1.4, or: 0.8 },
   },
+  // Extra Extreme: relational / narrative clues only, depth-2 what-if (see ULTRA_K1/K2 in difficulty.ts)
+  ultra: {
+    furnPerN: [1.7, 2.0], types: new Set(ULTRA_TYPES), negatives: true, maxClues: 3, relCap: 3, probe: [3, 3],
+    extraClue: 0, par: 1500, refPeople: 10,
+    weights: { direct: 0.2, semi: 1.0, neg: 0.8, rel: 2.6, relNeg: 1.3, global: 2.4, or: 1.3 },
+  },
 };
 
 /**
@@ -122,6 +139,14 @@ const TYPE_BOOST: Partial<Record<PType, number>> = {
   sameRoomAs: 1.8, differentRoomFrom: 1.3, aloneInRoom: 1.6, roomCount: 1.4, besidePerson: 1.5,
   lineOfSight: 1.6, roomHasFurniture: 1.2, roomSizeCmp: 1.2, inRoom: 1.3, notInRoom: 1.1,
   onFurniture: 1.3, besideFurniture: 1.2, notOnFurniture: 0.8, notBesideFurniture: 1.0,
+  // Extra Extreme (★) — only ever enumerated in that tier
+  seeCount: 3, seenByNobody: 2.6, crowdedThan: 2.6, onlyOnFurnitureInRoom: 2.2, noDiagonalNeighbour: 2,
+  closerToKindThan: 1.6, closestToKind: 1.3, roomAllOccupiable: 1.6, roomHasButNot: 1.8, largestRoomWith: 2,
+  roomTouches: 1.8, canSeeKind: 1.6, cannotSeeKind: 1.5, ifThen: 2.2, xor: 1.6,
+};
+/** Extra Extreme overrides (plain room / furniture facts recede). */
+const ULTRA_BOOST: Partial<Record<PType, number>> = {
+  inRoom: 0.25, onFurniture: 0.6, notInRoom: 0.6, distance: 0.6, dirOf: 0.9, lineOfSight: 2.2, besidePerson: 1.8, sameRoomAs: 2,
 };
 
 /** Selection: how many candidates are trial-propagated per step. */
@@ -144,7 +169,11 @@ function catOf(p: Predicate): Cat {
     case 'differentRoomFrom': case 'notBesidePerson': return 'relNeg';
     case 'lineOfSight': return p.value ? 'rel' : 'relNeg';
     case 'aloneInRoom': case 'roomCount': return 'global';
-    case 'or': return 'or';
+    case 'or': case 'xor': case 'ifThen': return 'or';
+    case 'seeCount': case 'seenByNobody': case 'crowdedThan': case 'onlyOnFurnitureInRoom': case 'noDiagonalNeighbour':
+    case 'closestToKind': return 'global';
+    case 'roomAllOccupiable': case 'roomHasButNot': case 'largestRoomWith': case 'roomTouches': case 'canSeeKind': return 'semi';
+    case 'cannotSeeKind': return 'neg';
     default: return 'rel';
   }
 }
@@ -538,13 +567,13 @@ function enumerateCandidates(
   const noOccupancy = new Set([...roles.victims, ...roles.killers, roles.accomplice].filter((x) => x >= 0));
   const add = (owner: number, pred: Predicate): void => {
     if (!allowed(pred.type)) return;
-    const others = pred.type === 'between' ? [pred.a, pred.b]
-      : 'personId' in pred ? [pred.personId] : [];
+    const others = predicatePeople(pred);
     const aboutVictim = others.some((o) => victimIds.has(o));
+    const types = flatTypes(pred);
     // "X was (not) in the same room as the victim" would name the killer outright
-    if (aboutVictim && (pred.type === 'sameRoomAs' || pred.type === 'differentRoomFrom')) return;
+    if (aboutVictim && (types.has('sameRoomAs') || types.has('differentRoomFrom'))) return;
     // sniper: sight lines to the victim ARE the rule
-    if (aboutVictim && variant === 'sniper' && pred.type === 'lineOfSight') return;
+    if (aboutVictim && variant === 'sniper' && types.has('lineOfSight')) return;
     // poison: "the killer was beside a {kind}" would name them outright
     if (variant === 'poison' && roles.killers.includes(owner) && pred.type === 'besideFurniture' && pred.kind === roles.poisonKind) return;
     // the liar needs statements whose negation reads naturally
@@ -652,8 +681,120 @@ function enumerateCandidates(
         add(p, { type: 'lineOfSight', personId: X, value: lineOfSight(g, c, d) });
       }
     }
+    if (allowed('seeCount')) ultraCandidates(rng, ctx, sol, p, add);
   }
   return out;
+}
+
+function flatTypes(p: Predicate, out = new Set<PType>()): Set<PType> {
+  out.add(p.type);
+  if (p.type === 'or' || p.type === 'ifThen' || p.type === 'xor' || p.type === 'and') { flatTypes(p.a, out); flatTypes(p.b, out); }
+  if (p.type === 'not') flatTypes(p.p, out);
+  return out;
+}
+
+/** Extra Extreme (★) candidates for suspect p: every one is a true fact about the solution. */
+function ultraCandidates(rng: Rng, ctx: PuzzleCtx, sol: Int16Array, p: number, add: (owner: number, pred: Predicate) => void): void {
+  const g = ctx.grid;
+  const n = sol.length;
+  const ids = ctx.personIds;
+  const c = sol[p] as number;
+  const R = g.roomOf[c] as number;
+  const allKinds = [...g.kindsPresent];
+  const roomCnt = (cell: number): number => {
+    let k = 0;
+    for (let q = 0; q < n; q++) if (g.roomOf[sol[q] as number] === g.roomOf[cell]) k++;
+    return k;
+  };
+  // ── sight
+  let seen = 0;
+  for (let q = 0; q < n; q++) if (q !== p && lineOfSight(g, sol[q] as number, c)) seen++;
+  if (seen === 0) add(p, { type: 'seenByNobody' });
+  else {
+    add(p, { type: 'seeCount', cmp: 'exactly', n: seen });
+    if (seen >= 2) add(p, { type: 'seeCount', cmp: 'atLeast', n: seen });
+    add(p, { type: 'seeCount', cmp: 'atMost', n: seen });
+  }
+  for (const k of allKinds) add(p, { type: seesKindMask(g, k)[c] ? 'canSeeKind' : 'cannotSeeKind', kind: k });
+  // ── company
+  const mine = roomCnt(c);
+  for (let q = 0; q < n; q++) {
+    if (q === p) continue;
+    if (mine > roomCnt(sol[q] as number)) add(p, { type: 'crowdedThan', personId: ids[q] as string });
+  }
+  if (g.kindAt[c] !== null && mine >= 2) {
+    let alone = true;
+    for (let q = 0; q < n; q++) if (q !== p && g.roomOf[sol[q] as number] === R && g.kindAt[sol[q] as number] !== null) alone = false;
+    if (alone) add(p, { type: 'onlyOnFurnitureInRoom' });
+  }
+  // ── neighbours
+  let diag = false;
+  for (let q = 0; q < n; q++) if (q !== p && diagAdjacent(g, c, sol[q] as number)) diag = true;
+  if (!diag) add(p, { type: 'noDiagonalNeighbour' });
+  // ── distance to furniture
+  for (const k of allKinds) {
+    const dist = kindDistance(g, k);
+    const mineD = dist[c] as number;
+    let unique = true;
+    for (let q = 0; q < n; q++) if (q !== p && (dist[sol[q] as number] as number) <= mineD) unique = false;
+    if (unique) add(p, { type: 'closestToKind', kind: k });
+  }
+  for (let q = 0; q < n; q++) {
+    if (q === p) continue;
+    const ks = rng.shuffle(allKinds.filter((k) => (kindDistance(g, k)[c] as number) < (kindDistance(g, k)[sol[q] as number] as number)));
+    for (const k of ks.slice(0, 2)) add(p, { type: 'closerToKindThan', kind: k, personId: ids[q] as string });
+  }
+  // ── rooms & furniture
+  if (roomAllOccupiable(g, R)) add(p, { type: 'roomAllOccupiable' });
+  const rk = g.roomKinds[R] as Set<FurnitureKind>;
+  const combos: [FurnitureKind, FurnitureKind][] = [];
+  for (const a of rk) {
+    if (g.roomKinds.every((s) => s.has(a))) continue;
+    for (const b of allKinds) if (!rk.has(b)) combos.push([a, b]);
+  }
+  for (const [a, b] of rng.shuffle(combos).slice(0, 3)) add(p, { type: 'roomHasButNot', has: a, not: b });
+  for (const k of rk) {
+    if (g.roomKinds.filter((s) => s.has(k)).length >= 2 && largestRoomWith(g, k) === R) add(p, { type: 'largestRoomWith', kind: k });
+  }
+  for (const R2 of roomsTouching(g)[R] as Set<number>) add(p, { type: 'roomTouches', roomId: g.roomIds[R2] as string });
+
+  // ── conditionals / exclusive or over simple atoms
+  const atoms = (truth: boolean): Predicate[] => {
+    const res: Predicate[] = [];
+    g.roomIds.forEach((rid, ri) => { if ((ri === R) === truth) res.push({ type: 'inRoom', roomId: rid }); });
+    if ((g.kindAt[c] !== null) === truth) res.push({ type: 'onAnyFurniture' });
+    else res.push({ type: 'onNoFurniture' });
+    for (const k of allKinds) {
+      if (OCCUPIABLE[k] && (g.kindAt[c] === k) === truth) res.push({ type: 'onFurniture', kind: k });
+      if ((g.adjKinds[c] as Set<FurnitureKind>).has(k) === truth) res.push({ type: 'besideFurniture', kind: k });
+      if ((seesKindMask(g, k)[c] === 1) === truth) res.push({ type: 'canSeeKind', kind: k });
+    }
+    for (let q = 0; q < n; q++) {
+      if (q === p) continue;
+      const d = sol[q] as number, X = ids[q] as string;
+      if ((g.roomOf[d] === R) === truth) res.push({ type: 'sameRoomAs', personId: X });
+      if (diagAdjacent(g, c, d) === truth) res.push({ type: 'besidePerson', personId: X });
+      if (Math.abs(rowOf(g, c) - rowOf(g, d)) === Math.abs(colOf(g, c) - colOf(g, d)) && lineOfSight(g, c, d) === truth) {
+        res.push({ type: 'lineOfSight', personId: X, value: true });
+      }
+    }
+    return res;
+  };
+  const T = rng.shuffle(atoms(true)), F = rng.shuffle(atoms(false));
+  const kindOf = (x: Predicate): string => x.type;
+  for (let i = 0; i < 4; i++) {
+    // if A then B: A true → B true; A false → B anything (the clue still cuts A's squares down to B's)
+    const aTrue = rng.chance(0.5);
+    const A = (aTrue ? T : F)[i];
+    const pool = aTrue ? T : rng.chance(0.5) ? T : F;
+    const B = pool.find((x) => kindOf(x) !== kindOf(A ?? x) && x !== A && (x.type !== 'inRoom' || A?.type !== 'inRoom'));
+    if (A && B && A.type !== 'besidePerson') add(p, { type: 'ifThen', a: A, b: B });
+  }
+  for (let i = 0; i < Math.min(3, T.length, F.length); i++) {
+    const a = T[i] as Predicate, b = F[(i + 1) % F.length] as Predicate;
+    if (a.type === b.type && a.type === 'inRoom') continue;
+    add(p, rng.chance(0.5) ? { type: 'xor', a, b } : { type: 'xor', a: b, b: a });
+  }
 }
 
 // ─────────────────────────── Clue selection ───────────────────────────
@@ -661,8 +802,97 @@ function enumerateCandidates(
 /** A chosen clue: `pred` is the sentence as stated (false for the liar). */
 interface Selection { owner: number; pred: Predicate; cat: Cat }
 
+const OPP_DIR = { north: 'south', south: 'north', east: 'west', west: 'east' } as const;
+
+/** The same fact told by the other person, or null ("A shares a room with B" ⇔ "B shares a room with A"). */
+function reowned(pr: Predicate, ownerId: string): Predicate | null {
+  switch (pr.type) {
+    case 'sameRoomAs': case 'differentRoomFrom': case 'besidePerson': case 'notBesidePerson':
+      return { type: pr.type, personId: ownerId };
+    case 'lineOfSight': return { type: 'lineOfSight', personId: ownerId, value: pr.value };
+    case 'distance': return { type: 'distance', personId: ownerId, cmp: pr.cmp, n: pr.n };
+    case 'dirOf': return { type: 'dirOf', personId: ownerId, dir: OPP_DIR[pr.dir] };
+    default: return null;
+  }
+}
+
+/**
+ * Extra Extreme: every suspect needs a sentence, but minimisation may leave
+ * someone with none. Hand them a symmetric fact about them that somebody
+ * else (with ≥ 2 sentences) was carrying — same meaning, every clue still
+ * necessary. False when someone cannot be served.
+ */
+function rebalanceOwners(out: Selection[], n: number, victims: Set<number>, liar: number, ids: string[]): boolean {
+  const cnt = new Array<number>(n).fill(0);
+  for (const s of out) cnt[s.owner] = (cnt[s.owner] as number) + 1;
+  for (let p = 0; p < n; p++) {
+    if (victims.has(p) || cnt[p]) continue;
+    if (p === liar) return false;
+    let best: Selection | null = null;
+    for (const s of out) {
+      if (s.owner === liar || victims.has(s.owner) || (cnt[s.owner] as number) < 2) continue;
+      if (!('personId' in s.pred) || s.pred.personId !== ids[p]) continue;
+      if (!reowned(s.pred, ids[s.owner] as string)) continue;
+      if (!best || (cnt[s.owner] as number) > (cnt[best.owner] as number)) best = s;
+    }
+    if (!best) return false;
+    const pred = reowned(best.pred, ids[best.owner] as string) as Predicate;
+    cnt[best.owner] = (cnt[best.owner] as number) - 1;
+    best.owner = p;
+    best.pred = pred;
+    best.cat = catOf(pred);
+    cnt[p] = 1;
+  }
+  return true;
+}
+
+/** Extra Extreme: read two compatible facts as one sentence ("could see Leonard, but not Ivy"). */
+function mergeAnd(rng: Rng, out: Selection[], liar: number): void {
+  const owners = [...new Set(out.map((s) => s.owner))];
+  for (const o of owners) {
+    if (o === liar) continue;
+    const mine = out.filter((s) => s.owner === o);
+    const sight = mine.filter((s) => s.pred.type === 'lineOfSight');
+    const ns = mine.filter((s) => s.pred.type === 'dirOf' && (s.pred.dir === 'north' || s.pred.dir === 'south'));
+    const ew = mine.filter((s) => s.pred.type === 'dirOf' && (s.pred.dir === 'east' || s.pred.dir === 'west'));
+    let pair: [Selection, Selection] | null = null;
+    if (sight.length >= 2) pair = [sight[0] as Selection, sight[1] as Selection];
+    else if (ns.length && ew.length) pair = [ns[0] as Selection, ew[0] as Selection];
+    if (!pair || !rng.chance(0.8)) continue;
+    const [a, b] = pair;
+    // "could see X, but not Y": the positive part first
+    const first = a.pred.type === 'lineOfSight' && !a.pred.value ? b : a;
+    const second = first === a ? b : a;
+    out.splice(out.indexOf(a), 1);
+    out.splice(out.indexOf(b), 1);
+    out.push({ owner: o, pred: { type: 'and', a: first.pred, b: second.pred }, cat: 'rel' });
+  }
+}
+
+/** Contract checks that only need the sentence list (docs/EXTRA-EXTREME.md §3). null when fine. */
+function ultraSelectionProblem(out: Selection[], victims: Set<number>, maxClues: number): string | null {
+  const per = new Map<number, number>(), perOr = new Map<number, number>();
+  const facts: Predicate[] = [];
+  const fam = new Set<string>(), star = new Set<string>();
+  for (const s of out) {
+    if (victims.has(s.owner)) continue;
+    per.set(s.owner, (per.get(s.owner) ?? 0) + 1);
+    if (s.pred.type === 'xor' || s.pred.type === 'ifThen' || s.pred.type === 'or') perOr.set(s.owner, (perOr.get(s.owner) ?? 0) + 1);
+    facts.push(...atomsOf(s.pred));
+    for (const f of familiesOf(s.pred)) fam.add(f);
+    for (const f of starFamiliesOf(s.pred)) star.add(f);
+  }
+  if ([...per.values()].some((k) => k > maxClues)) return 'perPerson';
+  if ([...perOr.values()].some((k) => k > 1)) return 'orPerPerson';
+  if (facts.filter(isRelational).length < 0.4 * facts.length) return 'relational';
+  if (fam.size < 3) return 'families';
+  if (star.size < 2) return 'stars';
+  return null;
+}
+
 function selectClues(
   rng: Rng, tier: Tier, t: number, spec: TierSpec, ctx: PuzzleCtx, sol: Int16Array, roles: Roles, variant: Variant,
+  relaxed = false,
 ): Selection[] | null {
   const g = ctx.grid;
   const n = sol.length;
@@ -686,6 +916,27 @@ function selectClues(
     const m = clueOf(i).mask;
     if (m && g.free.every((x) => m[x] === 1)) dead[i] = 1;
   }
+  const ultra = tier === 'ultra';
+  // Extra Extreme: no single sentence may pin a person to one square, row or column on an empty board
+  if (ultra) {
+    const emptyAct = new Uint8Array(prob.clues.length);
+    for (let i = 0; i < C; i++) {
+      if (dead[i]) continue;
+      const cl = clueOf(i);
+      if (cl.mask) {
+        const m = cl.mask;
+        const rs = new Set<number>(), cs = new Set<number>();
+        for (const x of g.free) if (m[x]) { rs.add(rowOf(g, x)); cs.add(colOf(g, x)); }
+        if (rs.size <= 1 || cs.size <= 1) dead[i] = 1;
+      } else if (cl.global) {
+        emptyAct[i] = 1;
+        const D0 = initialDomains(prob, emptyAct);
+        const ok = propagate(prob, emptyAct, D0);
+        emptyAct[i] = 0;
+        if (!ok || D0.some((d) => new Set(d.map((x) => rowOf(g, x))).size <= 1 || new Set(d.map((x) => colOf(g, x))).size <= 1)) dead[i] = 1;
+      }
+    }
+  }
 
   const act = new Uint8Array(prob.clues.length);
   for (let i = C; i < act.length; i++) act[i] = 1;
@@ -693,7 +944,8 @@ function selectClues(
   const sampleK = n >= 13 ? 8 : SAMPLE_K;
   const everyone = [...Array(n).keys()];
   const maxFor = (p: number): number => (victimSet.has(p) ? 2 : spec.maxClues);
-  const minFor = (p: number): number => (victimSet.has(p) ? 0 : p === liar ? 2 : 1);
+  // Extra Extreme: a suspect may lose every clue in minimisation (they get a symmetric one back at the end)
+  const minFor = (p: number): number => (victimSet.has(p) ? 0 : p === liar ? 2 : ultra ? 0 : 1);
   const counts = new Int32Array(n);
   const relCounts = new Int32Array(n);
   const usedKeys = new Set<string>();
@@ -701,6 +953,8 @@ function selectClues(
   const catCount: Record<Cat, number> = { direct: 0, semi: 0, neg: 0, rel: 0, relNeg: 0, global: 0, or: 0 };
   const rowColCount = new Int32Array(n);
   const orOwners = new Set<number>();
+  const typeCount = new Map<PType, number>();
+  const typeCap = Math.max(2, Math.ceil(n / 4));
   const isRowCol = (i: number): boolean => candOf(i).pred.type === 'row' || candOf(i).pred.type === 'col';
   const directCap = Math.max(1, Math.ceil(n / 3));
   const W = spec.weights;
@@ -758,7 +1012,9 @@ function selectClues(
     if ((counts[c.owner] as number) >= maxFor(c.owner)) return false;
     if (usedKeys.has(c.key)) return false;
     if (!cl.unary && (relCounts[c.owner] as number) >= spec.relCap) return false;
-    if (c.cat === 'or' && (catCount.or >= 2 || orOwners.has(c.owner))) return false;
+    if (c.cat === 'or' && (catCount.or >= (ultra ? Math.ceil(n / 2) : 2) || orOwners.has(c.owner))) return false;
+    // Extra Extreme: variety — no predicate type more than ~n/4 times in a case
+    if (ultra && (typeCount.get(c.pred.type) ?? 0) >= typeCap) return false;
     // "row 2" + "column 3" is a bare coordinate, not a deduction
     if (isRowCol(i) && (rowColCount[c.owner] as number) > 0) return false;
     if (W[c.cat] <= 0 && c.owner !== liar) return false;
@@ -805,9 +1061,10 @@ function selectClues(
   const weightOf = (i: number): number => {
     const c = candOf(i);
     if (c.owner === liar) return LIAR_W[c.cat] * (TYPE_BOOST[c.pred.type] ?? 1) / Math.sqrt(groupSize.get(groupOf(i)) ?? 1);
-    let w = (W[c.cat] * (TYPE_BOOST[c.pred.type] ?? 1)) / Math.sqrt(groupSize.get(groupOf(i)) ?? 1);
+    const boost = (ultra ? ULTRA_BOOST[c.pred.type] : undefined) ?? TYPE_BOOST[c.pred.type] ?? 1;
+    let w = (W[c.cat] * boost) / Math.sqrt(groupSize.get(groupOf(i)) ?? 1);
     if (c.cat === 'direct' && tier !== 'easy') w *= 1 - 0.4 * t;
-    if (c.cat === 'direct' && (tier === 'extreme' || tier === 'mastermind') && catCount.direct >= directCap) w *= 0.15;
+    if (c.cat === 'direct' && (tier === 'extreme' || tier === 'mastermind' || ultra) && catCount.direct >= directCap) w *= 0.15;
     if (c.pair && pairUse.get(c.pair)) w *= 0.3;
     return w;
   };
@@ -834,6 +1091,7 @@ function selectClues(
     catCount[c.cat]++;
     if (isRowCol(i)) rowColCount[c.owner] = (rowColCount[c.owner] as number) + 1;
     if (c.cat === 'or') orOwners.add(c.owner);
+    typeCount.set(c.pred.type, (typeCount.get(c.pred.type) ?? 0) + 1);
   };
   const deactivate = (i: number): void => {
     const c = candOf(i);
@@ -844,6 +1102,7 @@ function selectClues(
     catCount[c.cat]--;
     if (isRowCol(i)) rowColCount[c.owner] = (rowColCount[c.owner] as number) - 1;
     if (c.cat === 'or') orOwners.delete(c.owner);
+    typeCount.set(c.pred.type, (typeCount.get(c.pred.type) ?? 1) - 1);
   };
 
   phase("setup");
@@ -934,13 +1193,24 @@ function selectClues(
     const cat = candOf(i).cat;
     return cat === 'direct' ? 0 : cat === 'semi' ? 1 : cat === 'neg' ? 2 : 3;
   };
+  const mentionedSymmetric = (p: number, except: number): boolean => {
+    for (let j = 0; j < C; j++) {
+      if (!act[j] || j === except) continue;
+      const c = candOf(j);
+      if (c.owner === liar || victimSet.has(c.owner) || c.owner === p) continue;
+      if ('personId' in c.pred && c.pred.personId === ctx.personIds[p] && reowned(c.pred, ctx.personIds[c.owner] as string)) return true;
+    }
+    return false;
+  };
   const order = rng.shuffle([...Array(C).keys()].filter((i) => act[i]))
     .map((i, k) => ({ i, k }))
     .sort((a, b) => removalRank(a.i) - removalRank(b.i) || a.k - b.k)
     .map((x) => x.i);
   for (const i of order) {
     const o = candOf(i).owner;
-    if ((counts[o] as number) <= Math.max(1, minFor(o)) && !victimSet.has(o)) continue;
+    if ((counts[o] as number) <= Math.max(ultra ? 0 : 1, minFor(o)) && !victimSet.has(o)) continue;
+    // Extra Extreme: a suspect may only lose their last sentence if a symmetric fact about them can be handed back
+    if (ultra && counts[o] === 1 && (liar >= 0 || !mentionedSymmetric(o, i))) continue;
     deactivate(i);
     // propagation alone is cheaper; probing only when it is not enough
     if (deduce(prob, act, 0).status !== 'solved' && (probeMax < 2 || deduce(prob, act, probeMax).status !== 'solved')) activate(i);
@@ -974,9 +1244,8 @@ function selectClues(
 
   phase("topup");
   // ── 4. liar variants: every other "X is the liar" world must collapse by deduction
-  if (liar >= 0) {
-    const worlds = new Map<number, Problem>();
-    const worldOf = (L: number): Problem => {
+  const worlds = new Map<number, Problem>();
+  const worldOf = (L: number): Problem => {
       const hit = worlds.get(L);
       if (hit) return hit;
       const hyp = hypothesisItems(ctx, rspec, L);
@@ -994,12 +1263,13 @@ function selectClues(
       worlds.set(L, P);
       return P;
     };
+  if (liar >= 0) {
     const pending = rng.shuffle(liarCandidates(n, rspec).filter((L) => L !== liar));
     let rounds = 0;
     while (pending.length) {
       const L = pending[0] as number;
       const W2 = worldOf(L);
-      const r = deduce(W2, act, probeMax);
+      const r = (ultra ? deduceDeep(W2, act, ULTRA_K1, ULTRA_K2) : deduce(W2, act, probeMax));
       if (r.status === 'contradiction') { pending.shift(); continue; }
       if (rounds++ > 3 * n) return fail("liarRounds");
       const base = entropy(r.D);
@@ -1015,7 +1285,7 @@ function selectClues(
         const Dc = cloneDomains(r.D);
         act[i] = 1;
         let ok = applyIn(W2, i, Dc);
-        if (ok) ok = probe(W2, act, Dc, probeMax);
+        if (ok) ok = probe(W2, act, Dc, ultra ? ULTRA_K1 : probeMax);
         act[i] = 0;
         if (!ok) { picked = i; break; }
         const gain = base - entropy(Dc);
@@ -1029,13 +1299,91 @@ function selectClues(
   }
 
   phase("liar");
+  // ── 4b. Extra Extreme: every clue must matter (removing it breaks uniqueness over every liar reading).
+  // A clue the case stays unique without is dropped when the depth-2 deduction still solves — that is
+  // exactly where the deep what-if steps come from — otherwise the attempt fails.
+  if (ultra) {
+    const wrong = liar >= 0 ? liarCandidates(n, rspec).filter((L) => L !== liar) : [];
+    // Solutions over every liar reading, capped at 2. Each world is narrowed by propagation, then a MAC
+    // search tries the true solution first (a second one usually sits close by). quick: a small node budget
+    // (-1 = undecided); full: randomised restarts with growing budgets (-2 = still undecided → drop the attempt).
+    const countAll = (full: boolean): number => {
+      const t0 = performance.now();
+      let k = 0;
+      const worldsAll = [prob, ...wrong.map(worldOf)];
+      for (let wi = 0; wi < worldsAll.length && k < 2; wi++) {
+        const P = worldsAll[wi] as Problem;
+        const r = deduce(P, act, 0);
+        if (r.status === 'contradiction') continue;
+        if (r.status === 'solved') { k++; continue; }
+        const b1 = searchMACBounded(P, act, 2 - k, r.D, wi === 0 ? sol : undefined, 400);
+        if (b1.complete || b1.sols.length >= 2 - k) { k += b1.sols.length; continue; }
+        if (!full) { k = -1; break; }
+        let settled = false;
+        for (let budget = 800; budget <= 6400 && !settled; budget *= 2) {
+          const sr = mulberry32(hashSeed('ultra-restart', budget, wi));
+          const b2 = searchMACBounded(P, act, 2 - k, r.D, undefined, budget, () => sr.next());
+          if (b2.complete || b2.sols.length >= 2 - k) { k += b2.sols.length; settled = true; }
+        }
+        if (!settled) { k = -2; break; }
+      }
+      genStats.ms.ultraSearch = (genStats.ms.ultraSearch ?? 0) + performance.now() - t0;
+      return k;
+    };
+    const deducible = (): boolean => deduceDeep(prob, act, ULTRA_K1, ULTRA_K2).status === 'solved'
+      && wrong.every((L) => deduceDeep(worldOf(L), act, ULTRA_K1, ULTRA_K2).status === 'contradiction');
+    const actives = rng.shuffle([...Array(C).keys()].filter((i) => act[i]))
+      .map((i, k) => ({ i, k }))
+      .sort((a, b) => removalRank(a.i) - removalRank(b.i) || a.k - b.k)
+      .map((x) => x.i);
+    // pass 0: drop what the deep engine can do without; clues it needs but whose necessity is not yet
+    // shown are deferred. Removing clues never strengthens the deduction, so a deferred clue stays needed by
+    // it — pass 1 only has to show it is necessary for uniqueness (it may have become so meanwhile).
+    const deferred: number[] = [];
+    for (const i of actives) {
+      const o = candOf(i).owner;
+      deactivate(i);
+      const k = countAll(false);
+      if (k >= 2) { activate(i); continue; }
+      if (!(o === liar && (counts[o] as number) < 2) && deducible()) continue; // redundant: gone for good
+      activate(i);
+      deferred.push(i);
+    }
+    for (const i of deferred) {
+      const o = candOf(i).owner;
+      deactivate(i);
+      const k = countAll(true);
+      activate(i);
+      if (k >= 2 || relaxed) continue;
+      phase('ultraB-fail');
+      return fail(k === -2 ? 'ultraUndecided' : o === liar ? 'ultraLiarSlack' : 'ultraSlack');
+    }
+    // no free start: unary sentences + rows/columns alone pin nobody
+    const unaryAct = new Uint8Array(act.length);
+    for (let i = 0; i < C; i++) if (act[i] && clueOf(i).unary) unaryAct[i] = 1;
+    const D0 = initialDomains(prob, unaryAct);
+    if (!propagate(prob, unaryAct, D0) || D0.some((d) => d.length === 1)) { phase('ultraB'); return fail('ultraFreeStart'); }
+    // depth: ≥ 3 what-if steps, ≥ 1 of depth 2
+    phase('ultraB');
+    const gs = gradedSolve(prob, act, ULTRA_K1, ULTRA_K2);
+    if (gs.status !== 'solved') { phase('ultraG'); return fail('ultraNotSolved'); }
+    // liar cases: refuting "X is the liar" is itself a what-if, one level above the steps it needs
+    for (const L of wrong) {
+      const gw = gradedSolve(worldOf(L), act, ULTRA_K1, ULTRA_K2);
+      if (gw.status !== 'contradiction') { phase('ultraG'); return fail('ultraLiarOpen'); }
+      gs.steps.push(1 + gw.steps.reduce((m, d) => Math.max(m, d), 0));
+    }
+    if (gs.steps.length < 3 && !relaxed) { phase('ultraG'); return fail('ultraShallow'); }
+    if (!gs.steps.some((d) => d >= 2) && !relaxed) { phase('ultraG'); return fail('ultraNoDepth2'); }
+  }
+  phase("ultra");
   // ── 5. verify the true world with the exhaustive solver
   const sols = search(prob, act, 2);
   if (sols.length !== 1) return fail("notUnique");
   const only = sols[0] as Int16Array;
   for (let p = 0; p < n; p++) if (only[p] !== sol[p]) return fail("wrongSol");
   // the real world must still be deducible (top-up / liar clues only ever add facts)
-  if (liar >= 0 && deduce(prob, act, probeMax).status !== 'solved') return fail("liarStarNotSolved");
+  if (liar >= 0 && (ultra ? deduceDeep(prob, act, ULTRA_K1, ULTRA_K2) : deduce(prob, act, probeMax)).status !== 'solved') return fail("liarStarNotSolved");
 
   phase("verify");
   const out: Selection[] = [];
@@ -1044,6 +1392,18 @@ function selectClues(
     const c = candOf(i);
     const stated = c.owner === liar ? negatePred(c.pred) : c.pred;
     out.push({ owner: c.owner, pred: stated, cat: catOf(stated) });
+  }
+  if (ultra) {
+    // Who says a sentence matters once someone may be lying (in the "X lies" readings X's sentences flip, and a
+    // merged "A and B" would flip to "not both"), so liar cases keep their sentences exactly as selected.
+    if (liar < 0) {
+      if (!rebalanceOwners(out, n, victimSet, liar, ctx.personIds)) return fail('ultraOwner');
+      mergeAnd(rng, out, liar);
+    } else {
+      for (let p = 0; p < n; p++) if (!victimSet.has(p) && !out.some((x) => x.owner === p)) return fail('ultraOwner');
+    }
+    const why = ultraSelectionProblem(out, victimSet, spec.maxClues);
+    if (why) return fail(`ultra:${why}`);
   }
   return out;
 }
@@ -1070,6 +1430,8 @@ function tryGenerate(cs: CaseSpec, attempt: number): Puzzle | null {
   const { tier, variant, t } = cs;
   const spec = TIER_SPEC[tier];
   const theme = themeOf(cs.district.themeId);
+  // Extra Extreme safety net: very late attempts drop the depth / every-clue-matters requirements so a case always exists
+  const relaxed = tier === 'ultra' && attempt >= ULTRA_RELAX_AT;
   // some scenarios are impossible on some small plans (e.g. lockedRoom on a 5×5 ring): late attempts carve organically
   const layout: LayoutStyle = attempt >= 24 ? 'organic' : cs.district.layout;
 
@@ -1125,7 +1487,7 @@ function tryGenerate(cs: CaseSpec, attempt: number): Puzzle | null {
   // clues — victims are pinned through everybody else's clues; a victim clue of their own is a last resort
   let sel: Selection[] | null = null;
   for (let s = 0; s < 3; s++) {
-    const cand = selectClues(rng, tier, t, spec, ctx, sol, roles, variant);
+    const cand = selectClues(rng, tier, t, spec, ctx, sol, roles, variant, relaxed);
     if (!cand) { if (s >= 1 && !sel) break; continue; }
     if (!cand.some((x) => roles.victims.includes(x.owner))) { sel = cand; break; }
     sel ??= cand;
@@ -1143,7 +1505,7 @@ function tryGenerate(cs: CaseSpec, attempt: number): Puzzle | null {
       default: return v >= 0 ? { type: 'roomCount', cmp: 'exactly', n: 2 } : killerRulePredicate(killerRule);
     }
   };
-  const textCtx = { rows, cols, rooms, people, seed };
+  const textCtx = { rows, cols, rooms, people, seed, furniture, tier };
   const clues: Puzzle['clues'] = [];
   people.forEach((person, p) => {
     const vi = roles.victims.indexOf(p);
@@ -1190,11 +1552,21 @@ function tryGenerate(cs: CaseSpec, attempt: number): Puzzle | null {
   if (roles.liar >= 0) puzzle.liarId = idOf(roles.liar);
   if (roles.accomplice >= 0) puzzle.accompliceId = idOf(roles.accomplice);
   if (roles.poisonKind) puzzle.poisonKind = roles.poisonKind;
+  if (tier === 'ultra') {
+    // belt and braces: the finished case, re-read from its own clues, meets the contract
+    const rep = difficultyReport(puzzle);
+    const serious = relaxed ? rep.problems.filter((x) => !/what-if|depth/.test(x)) : rep.problems;
+    if (serious.length) return fail(`contract:${serious[0]}`);
+  }
   return puzzle;
 }
 
+/** Extra Extreme: attempts from this one on are generated with the relaxed contract (never seen in the shipped ladder). */
+const ULTRA_RELAX_AT = 90;
+
 function buildCase(cs: CaseSpec): Puzzle {
-  for (let attempt = 0; attempt < 80; attempt++) {
+  const maxAttempts = cs.tier === 'ultra' ? 130 : 80;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     genStats.attempts++;
     const p = tryGenerate(cs, attempt);
     if (p) { genStats.cases++; return p; }
@@ -1277,12 +1649,15 @@ function weeklySpec(isoWeek: string): CaseSpec {
 
 export interface CustomOptions { districtId: string; tier: Tier; size: number; variant: Variant; seed: number }
 
-/** Normalised custom options (size clamped to 4–14 and to the variant's minimum). */
+/** Normalised custom options (size clamped to 4–14 — Extra Extreme 8–12 and its own scenarios — and to the variant minimum). */
 export function normalizeCustom(o: CustomOptions): CustomOptions {
   const d = districtOf(o.districtId);
-  const variant: Variant = o.variant in VARIANT_MIN_SIZE ? o.variant : 'classic';
-  const size = Math.max(VARIANT_MIN_SIZE[variant], Math.min(14, Math.max(4, Math.round(o.size) || 4)));
   const tier: Tier = TIERS.includes(o.tier) ? o.tier : 'medium';
+  let variant: Variant = o.variant in VARIANT_MIN_SIZE ? o.variant : 'classic';
+  // Extra Extreme: only its own scenarios, 8–12 squares a side
+  if (tier === 'ultra' && !VARIANTS_BY_TIER.ultra.includes(variant)) variant = 'classic';
+  const [lo, hi] = tier === 'ultra' ? [8, 12] : [4, 14];
+  const size = Math.max(VARIANT_MIN_SIZE[variant], Math.min(hi, Math.max(lo, Math.round(o.size) || lo)));
   return { districtId: d.id, tier, size, variant, seed: Math.abs(Math.floor(o.seed)) >>> 0 };
 }
 

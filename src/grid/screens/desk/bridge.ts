@@ -74,7 +74,7 @@ export const gridSizeFor: EngineV2['gridSizeFor'] = (t, i) =>
   E.gridSizeFor ? E.gridSizeFor(t, i) : 4 + Math.min(10, i % 10);
 export const variantFor: EngineV2['variantFor'] = (t, i, s) => (E.variantFor ? E.variantFor(t, i, s) : 'classic');
 
-const TIER_LETTER: Record<Tier, string> = { easy: 'R', medium: 'D', hard: 'I', extreme: 'C', mastermind: 'M' };
+const TIER_LETTER: Record<Tier, string> = { easy: 'R', medium: 'D', hard: 'I', extreme: 'C', mastermind: 'M', ultra: 'U' };
 
 export const weeklyPuzzle: EngineV2['weeklyPuzzle'] = (week) =>
   E.weeklyPuzzle ? E.weeklyPuzzle(week) : E.generatePuzzle!('frostmere', 'extreme', (hashSeed('week', week) % 30) + 1);

@@ -21,6 +21,15 @@ export interface Spec {
   back: ReactNode;
   front?: ReactNode;
   windows: Win[];
+  /** The sealed attic (tier 5, Extra Extreme): the roof / gable / lantern box above the top window row. */
+  attic?: Box;
+}
+
+export interface Box {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
 export interface Ctx {

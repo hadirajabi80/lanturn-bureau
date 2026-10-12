@@ -18,7 +18,10 @@ export {
 export type { PuzzleCtx, PosFn, Tri } from './predicates';
 export { clueText, killerRuleText, victimRuleText, pronouns, rowLabel, colLabel, numberWord, furnitureNoun } from './text';
 export type { TextCtx } from './text';
-export { deduce, search, propagate, probe, makeProblem, compileItem, initialDomains, cloneDomains, allSingle } from './solver';
+export {
+  deduce, search, propagate, probe, makeProblem, compileItem, initialDomains, cloneDomains, allSingle, deduceDeep, gradedSolve,
+  someoneStuck, failsAtDepth2, deduceDeepFrom, searchMAC, searchMACBounded,
+} from './solver';
 export type { Problem, Domains, CClue, CustomRule, ProblemItem, DeduceStatus } from './solver';
 export {
   negatePred, hasPlainNegation, roomAdjacency, baseRuleItems, hypothesisItems, liarCandidates, culpritsFromPos,
@@ -47,3 +50,8 @@ export type { CustomOptions } from './generator';
 export { codeFor, parseCode, DISTRICT_CODES, TIER_LETTER, DISTRICT_IDS } from './codes';
 export type { ParsedCode } from './codes';
 export * from './explain';
+export {
+  difficultyReport, familiesOf, starFamiliesOf, atomsOf, isRelational, ULTRA_K1, ULTRA_K2, BANNED_ULTRA, STAR_TYPES, setUltraBounds,
+} from './difficulty';
+export type { DifficultyReport, ClueFamily } from './difficulty';
+export { kindDistance, seesKindMask, roomsTouching, largestRoomWith, roomAllOccupiable, countSpecOf, reviseExtra } from './extra';

@@ -11,10 +11,11 @@ import { useReducedMotion } from 'framer-motion';
 import clsx from 'clsx';
 import { ArrowLeft, CircleHelp, Lightbulb, Redo2, Settings2, Tag, Undo2 } from 'lucide-react';
 import { Stamp } from '@/components/fx';
-import { PRINT } from '@/grid/ui';
+import { PRINT, SkullKeyGlyph } from '@/grid/ui';
 import { toast } from '@/components/ui/Toast';
 import {
   openCellsFor,
+  parSecondsFor,
   useFloorplan,
   type AccuseResult,
   type BurnInfo,
@@ -32,6 +33,7 @@ import { OttoPanel, type OttoView } from './OttoPanel';
 import { BrassBtn, DeskBoard, DeskFrame, GhostBtn, MonoClock, Overlay, PanelBox, PlanFrame, SHEET_CLASS, SquareBtn, VariantIcon, anyOverlayOpen, districtFor } from './parts';
 import { ResultsCard, type ResultAction } from './ResultsCard';
 import { ScenarioExplainer } from './ScenarioExplainer';
+import { UltraExplainer } from './UltraExplainer';
 import { TIER_NAME, VARIANT_META, formatTime, pad2, shareOrCopy, shareText } from './util';
 
 export interface CasePlayerProps {
@@ -113,6 +115,8 @@ export function CasePlayer(props: CasePlayerProps) {
   const lastResult = useFloorplan((s) => s.lastResult);
   const settings = useFloorplan((s) => s.settings);
   const seenVariants = useFloorplan((s) => s.seenVariants);
+  const seenTiers = useFloorplan((s) => s.seenTiers);
+  const attic = puzzle.tier === 'ultra';
   const showTimer = props.showTimer ?? (timeLimitMs !== undefined || (mode !== 'zen' && settings.showTimer));
 
   const ready = activeId === puzzle.id && !!active;
@@ -175,6 +179,7 @@ export function CasePlayer(props: CasePlayerProps) {
   // ── UI state ──
   const [lineupOpen, setLineupOpen] = useState(false);
   const [scenarioOpen, setScenarioOpen] = useState(false);
+  const [atticOpen, setAtticOpen] = useState(false);
   const [ottoView, setOttoView] = useState<OttoView>(null);
   const [zenViolations, setZenViolations] = useState<string[]>([]);
   const [replay, setReplay] = useState<Record<string, Cell | null> | null>(null);
@@ -202,19 +207,30 @@ export function CasePlayer(props: CasePlayerProps) {
     return () => window.clearTimeout(t);
   }, [phase, reduced]);
 
-  // first time this scenario is met → explainer
+  // first Extra Extreme case → the "No coordinates" card; first time this scenario is met → explainer
   const autoShown = useRef(false);
+  const isNewAttic = attic && !seenTiers.includes('ultra');
   useEffect(() => {
-    if (!ready || autoShown.current) return;
-    if (!seenVariants.includes(variant) && phase === 'placing') {
+    if (!ready || autoShown.current || phase !== 'placing') return;
+    if (isNewAttic) {
+      autoShown.current = true;
+      setAtticOpen(true);
+    } else if (!seenVariants.includes(variant)) {
       autoShown.current = true;
       setScenarioOpen(true);
     }
-  }, [ready, seenVariants, variant, phase]);
+  }, [ready, seenVariants, variant, phase, isNewAttic]);
   const isNewVariant = !seenVariants.includes(variant);
   const closeScenario = useCallback(() => {
     setScenarioOpen(false);
     store().markVariantSeen(variant);
+  }, [store, variant]);
+  const closeAttic = useCallback(() => {
+    setAtticOpen(false);
+    const first = !store().seenTiers.includes('ultra');
+    store().markTierSeen('ultra');
+    // the scenario card follows the attic card on the very first visit
+    if (first && !store().seenVariants.includes(variant) && store().active?.phase === 'placing') setScenarioOpen(true);
   }, [store, variant]);
 
   // reopen the line-up automatically when entering 'accusing'
@@ -642,6 +658,20 @@ export function CasePlayer(props: CasePlayerProps) {
     </button>
   );
 
+  const atticChip = attic ? (
+    <button
+      type="button"
+      onClick={() => setAtticOpen(true)}
+      className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-[6px] border-2 border-[var(--fp-ink)] px-2 text-[13px] font-semibold text-white"
+      style={{ background: 'var(--attic-bg)' }}
+      aria-label="Extra Extreme: no coordinates. How the clues work"
+      title="Extra Extreme: no coordinates"
+    >
+      <SkullKeyGlyph size={17} className="text-[var(--attic-red-ink)]" />
+      <span className="max-[560px]:hidden">No coordinates</span>
+    </button>
+  ) : null;
+
   const settingsBtn = (
     <>
       {/* the desk is saved as you go, so the rules page can be opened mid-case */}
@@ -688,7 +718,7 @@ export function CasePlayer(props: CasePlayerProps) {
           result={lastResult}
           title={puzzle.title}
           code={code}
-          parSeconds={puzzle.parSeconds}
+          parSeconds={parSecondsFor(puzzle)}
           showStars={mode !== 'zen'}
           onReplay={startReplay}
           onShare={() => void share()}
@@ -733,7 +763,18 @@ export function CasePlayer(props: CasePlayerProps) {
         className={clsx('fixed z-[60]', wide ? 'bottom-6 left-1/2 w-[min(560px,46vw)] -translate-x-1/2' : 'inset-x-2 bottom-[calc(88px+var(--safe-bottom))]')}
       />
       <LineUp puzzle={puzzle} open={lineupOpen && phase === 'accusing'} onClose={() => setLineupOpen(false)} onAccuse={onAccuse} burnEnabled={burnEnabled} />
-      <ScenarioExplainer variant={variant} open={scenarioOpen} onClose={closeScenario} isNew={isNewVariant} />
+      <ScenarioExplainer
+        variant={variant}
+        open={scenarioOpen}
+        onClose={closeScenario}
+        isNew={isNewVariant}
+        attic={attic}
+        onAtticRules={() => {
+          closeScenario();
+          setAtticOpen(true);
+        }}
+      />
+      {attic && <UltraExplainer open={atticOpen} onClose={closeAttic} isNew={isNewAttic} />}
       {showBurnOverlay && (
         <BurnOverlay open={phase === 'burned' && burnShown} title={puzzle.title} actions={defaultBurnActions} />
       )}
@@ -786,6 +827,7 @@ export function CasePlayer(props: CasePlayerProps) {
             <DistrictSwatch />
             {titleBlock}
             {props.hud}
+            {atticChip}
             {scenarioChip}
             {settingsBtn}
           </header>
@@ -826,7 +868,8 @@ export function CasePlayer(props: CasePlayerProps) {
           {clock !== null && <MonoClock ms={clock} warn={clockWarn} className="!px-2 !py-1 text-sm" label={instrumentsProps.clockLabel} />}
         </header>
         <div className="flex items-center gap-1.5 px-2 py-2">
-          {scenarioChip}
+          {atticChip}
+            {scenarioChip}
           <div className="flex-1" />
           <SquareBtn
             label={settings.furnitureLabels ? 'Hide furniture name labels' : 'Show furniture name labels'}

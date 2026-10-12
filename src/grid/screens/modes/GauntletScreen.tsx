@@ -1,5 +1,5 @@
 /**
- * /plans/gauntlet — seven floors of rising difficulty. No Reveal, two Ask Otto for the whole run,
+ * /plans/gauntlet — eight floors of rising difficulty, the last one an Extra Extreme case from the sealed attic. No Reveal, two Ask Otto for the whole run,
  * and one burn ends it. The best floor reached is saved.
  */
 import { useState } from 'react';
@@ -13,6 +13,7 @@ import type { Puzzle, Tier, Variant } from '@/grid/types';
 import { BrassButton, GhostButton, MonoStat, PageShell, SkinProvider, VariantGlyph } from '@/grid/ui';
 import { generateCustom, hashSeed } from '../desk/bridge';
 import { CasePlayer } from '../desk/CasePlayer';
+import { HEAVY_TIERS } from '../desk/genJob';
 import { DeskLoading, useGeneratedPuzzle } from '../desk/loading';
 import { VARIANT_META } from '../desk/util';
 import { FactTable, IntroSheet, ModeLayout, RunCard } from './shared';
@@ -32,13 +33,18 @@ export const GAUNTLET: GauntletStage[] = [
   { tier: 'extreme', variant: 'accomplice', size: 10, label: 'Chief · the accomplice' },
   { tier: 'extreme', variant: 'double', size: 11, label: 'Chief · double homicide' },
   { tier: 'mastermind', variant: 'liarDouble', size: 12, label: 'Mastermind' },
+  { tier: 'ultra', variant: 'classic', size: 9, label: 'Extra Extreme · the sealed attic' },
 ];
 const OTTO_PER_RUN = 2;
 
-export function gauntletPuzzle(seed: number, stage: number): Puzzle {
+function gauntletOpts(seed: number, stage: number) {
   const s = GAUNTLET[stage]!;
   const district = DISTRICTS[hashSeed('gauntlet-d', seed, stage) % DISTRICTS.length]!.id;
-  return generateCustom({ districtId: district, tier: s.tier, size: s.size, variant: s.variant, seed: hashSeed('gauntlet', seed, stage) % 1_000_000 });
+  return { districtId: district, tier: s.tier, size: s.size, variant: s.variant, seed: hashSeed('gauntlet', seed, stage) % 1_000_000 };
+}
+
+export function gauntletPuzzle(seed: number, stage: number): Puzzle {
+  return generateCustom(gauntletOpts(seed, stage));
 }
 
 type Phase = 'intro' | 'playing' | 'cleared' | 'over';
@@ -52,7 +58,12 @@ export function GauntletScreen() {
   const [ottoUsed, setOttoUsed] = useState(0);
   const [end, setEnd] = useState<{ stage: number; newBest: boolean; outcome: RecordOutcome | null } | null>(null);
 
-  const gen = useGeneratedPuzzle(phase === 'playing' ? `${seed}-${stage}` : null, () => gauntletPuzzle(seed, stage));
+  const heavy = phase === 'playing' && HEAVY_TIERS.has(GAUNTLET[stage]!.tier);
+  const gen = useGeneratedPuzzle(
+    phase === 'playing' ? `${seed}-${stage}` : null,
+    () => gauntletPuzzle(seed, stage),
+    heavy ? { kind: 'custom', opts: gauntletOpts(seed, stage) } : null,
+  );
 
   const start = () => {
     setSeed(Date.now() % 1_000_000_007);
@@ -79,7 +90,13 @@ export function GauntletScreen() {
   };
 
   if (phase === 'playing') {
-    if (gen.status !== 'ready') return <DeskLoading label={`Climbing to floor ${stage + 1}…`} />;
+    if (gen.status !== 'ready')
+      return (
+        <DeskLoading
+          label={GAUNTLET[stage]!.tier === 'ultra' ? `Unsealing the attic, floor ${stage + 1}…` : `Climbing to floor ${stage + 1}…`}
+          attic={GAUNTLET[stage]!.tier === 'ultra'}
+        />
+      );
     const s = GAUNTLET[stage]!;
     return (
       <CasePlayer
@@ -103,11 +120,11 @@ export function GauntletScreen() {
 
   return (
     <SkinProvider>
-      <PageShell title="The Gauntlet" kicker="Modes · seven floors" back="/plans/modes" backLabel="Back to modes">
+      <PageShell title="The Gauntlet" kicker="Modes · eight floors" back="/plans/modes" backLabel="Back to modes">
         {phase === 'over' && end ? (
           <div className="py-2 sm:py-6">
             <RunCard
-              kicker={end.stage >= GAUNTLET.length ? 'The roof' : 'The file burned'}
+              kicker={end.stage >= GAUNTLET.length ? 'The sealed attic' : 'The file burned'}
               title={end.stage >= GAUNTLET.length ? 'You survived the Gauntlet' : end.newBest ? 'Your highest climb yet' : 'The run is over'}
               big={`${end.stage}/${GAUNTLET.length}`}
               bigLabel="floors cleared"
@@ -164,12 +181,12 @@ export function GauntletScreen() {
             }
           >
             <IntroSheet
-              label="One life · seven floors"
-              title="Climb to the roof"
-              figure="7"
-              figureLabel="Seven floors"
+              label="One life · eight floors"
+              title="Climb to the attic"
+              figure="8"
+              figureLabel="Eight floors"
               rules={[
-                <>Seven cases, each harder than the last. Liars, accomplices and a double homicide wait upstairs.</>,
+                <>Eight cases, each harder than the last. Liars, accomplices and a double homicide wait upstairs, and above the roof, an Extra Extreme case with no coordinates at all.</>,
                 <>No Reveal. Otto answers twice in the whole run.</>,
                 <>One burned file ends the climb.</>,
               ]}

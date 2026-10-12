@@ -35,8 +35,13 @@ import { compilePredicate, isGlobalPredicate, makePuzzleCtx, predicatePeople } f
 import { hashSeed } from './rng';
 import type { RuleSpec } from './rules';
 import { baseRuleItems, hitFor, hypothesisItems } from './rules';
-import type { CustomRule, ProblemItem } from './solver';
+import type { CustomRule, Domains, ProblemItem } from './solver';
+import { cloneDomains, deduceDeepFrom, failsAtDepth2, propagate as solverPropagate, someoneStuck } from './solver';
 import { numberWord } from './text';
+import { isExtraGlobal, reviseExtra } from './extra';
+import type { World } from './worlds';
+import { puzzleWorlds } from './worlds';
+import { ULTRA_K1, ULTRA_K2 } from './difficulty';
 
 // ─────────────────────────── Public types ───────────────────────────
 
@@ -477,6 +482,25 @@ class TK {
           : pr.cmp === 'atLeast' ? `in a room of at least ${w} squares` : `in a room of at most ${w} squares`;
       }
       case 'or': return `either ${this.frag(pr.a, owner)} or ${this.frag(pr.b, owner)}`;
+      case 'seeCount': {
+        const q = pr.cmp === 'exactly' ? 'exactly' : pr.cmp === 'atLeast' ? 'at least' : 'at most';
+        return `in plain view of ${q} ${numberWord(pr.n)} ${pr.n === 1 ? 'person' : 'people'}`;
+      }
+      case 'seenByNobody': return "out of everybody's sight";
+      case 'crowdedThan': return `in a more crowded room than ${N(pr.personId)}`;
+      case 'onlyOnFurnitureInRoom': return `the only one in ${P.his} room on a piece of furniture`;
+      case 'noDiagonalNeighbour': return `without anybody diagonally beside ${P.him}`;
+      case 'closerToKindThan': return `closer to ${this.furnA(pr.kind)} than ${N(pr.personId)} was`;
+      case 'closestToKind': return `closer to ${this.furnA(pr.kind)} than anybody else`;
+      case 'roomAllOccupiable': return 'in a room whose furniture could all be sat or stood on';
+      case 'roomHasButNot': return `in a room with ${this.furnA(pr.has)} but no ${FURNITURE_LABEL[pr.not].plural}`;
+      case 'largestRoomWith': return `in the largest room with ${this.furnA(pr.kind)}`;
+      case 'roomTouches': return `in a room next to the ${this.roomById(pr.roomId)}`;
+      case 'canSeeKind': return `within sight of ${this.furnA(pr.kind)}`;
+      case 'cannotSeeKind': return `out of sight of every ${this.furnNoun(pr.kind)}`;
+      case 'ifThen': return `${this.frag(pr.b, owner)} if ${P.he} was ${this.frag(pr.a, owner)}`;
+      case 'xor': return `either ${this.frag(pr.a, owner)} or ${this.frag(pr.b, owner)}, but not both`;
+      case 'and': return `${this.frag(pr.a, owner)} and ${this.frag(pr.b, owner)}`;
       case 'not': return this.negFrag(pr.p, owner);
       default: return 'where the plan says';
     }
@@ -508,6 +532,9 @@ class TK {
         case 'notBesidePerson': return { type: 'besidePerson', personId: pr.personId };
         case 'lineOfSight': return { type: 'lineOfSight', personId: pr.personId, value: !pr.value };
         case 'roomHasFurniture': return { type: 'roomHasFurniture', kind: pr.kind, value: !pr.value };
+        case 'seenByNobody': return { type: 'seeCount', cmp: 'atLeast', n: 1 };
+        case 'canSeeKind': return { type: 'cannotSeeKind', kind: pr.kind };
+        case 'cannotSeeKind': return { type: 'canSeeKind', kind: pr.kind };
         case 'not': return pr.p;
         default: return null;
       }
@@ -531,6 +558,7 @@ class TK {
     }
     if (cc.negated) return `${Nm} is the liar, so ${P.he} was ${this.negFrag(cc.orig, q)}`;
     const verb = this.pick(['said', 'told us', 'swore'], 'verb', q, cc.ci);
+    if (cc.orig.type === 'ifThen') return `${Nm} ${verb} that if ${P.he} was ${this.frag(cc.orig.a, q)}, ${P.he} was ${this.frag(cc.orig.b, q)}`;
     return `${Nm} ${verb} ${P.he} was ${this.frag(cc.orig, q)}`;
   }
 
@@ -835,8 +863,8 @@ function tLineOwner(tk: TK, D: number[][]): Finding | null {
       if (best < 0) continue;
       const N = tk.name(p), P = tk.pr(p), LN = tk.line(axis, l), Q = tk.name(best);
       const why = tk.pick([
-        `${N} can only be in ${LN}, so ${LN} is ${P.his}.`,
-        `Every square ${N} has left is in ${LN}, so that line is ${P.his}.`,
+        `${N} can only be in ${LN}, so ${LN} is ${P.his === 'her' ? 'hers' : P.his}.`,
+        `Every square ${N} has left is in ${LN}, so that line is ${P.his === 'her' ? 'hers' : P.his}.`,
       ], 'naked1', p, l);
       return elimFinding(tk, D, best, bestCells, d, 'line-confined', why, `Cross it out for ${Q}.`);
     }
@@ -1080,6 +1108,7 @@ function normGlobal(pr: Predicate): { cmp: 'exactly' | 'atLeast' | 'atMost'; n: 
  */
 function globalElims(pre: Pre, cc: CC, D: number[][], tk: TK | null): Elim[] {
   if (cc.custom) return customElims(pre, cc, D, tk);
+  if (isExtraGlobal(cc.pred)) return extraElims(pre, cc, D, tk);
   const s = cc.owner;
   const g = pre.g;
   const n = pre.n;
@@ -1368,7 +1397,7 @@ function tWhatIf(tk: TK, D: number[][]): Finding | null {
         what = contra.p === q ? `${P.he} would contradict ${P.himself}` : `${X} would have nowhere left to stand`;
         reason = [c, ...(D[contra.p] as number[]).slice(0, 8)];
       } else if (contra.kind === 'rule') {
-        what = `there'd be no way that ${soft(pre, tk.said(contra.cc))}`;
+        what = brokenWhat(tk, contra.cc);
       } else {
         what = `nobody could reach ${tk.line(contra.axis, contra.l)}`;
         const at = contra.axis === 0 ? pre.rowAt : pre.colAt;
@@ -1384,6 +1413,12 @@ function tWhatIf(tk: TK, D: number[][]): Finding | null {
   return null;
 }
 
+/** "Benjamin couldn't have been without anybody diagonally beside him" / "there'd be no way that only one person …" */
+function brokenWhat(tk: TK, cc: CC): string {
+  if (cc.desc || cc.custom || cc.negated) return `there'd be no way that ${soft(tk.pre, tk.said(cc))}`;
+  return `${tk.name(cc.owner)} couldn't have been ${tk.frag(cc.orig, cc.owner)}`;
+}
+
 // ─────────────────────────── Runner ───────────────────────────
 
 type Technique = (tk: TK, D: number[][]) => Finding | null;
@@ -1394,7 +1429,8 @@ function run(tk: TK, D: number[][], whatIf: boolean): Finding | null {
     const f = t(tk, D);
     if (f) return f;
   }
-  return whatIf ? tWhatIf(tk, D) : null;
+  if (!whatIf) return null;
+  return tWhatIf(tk, D) ?? (tk.pre.p.tier === 'ultra' ? deepWhatIf(tk, D) : null);
 }
 
 /** Lower-case the first letter unless the sentence starts with a person's name. */
@@ -1528,6 +1564,18 @@ export function nextDeduction(p: Puzzle, state: OttoState): Deduction | null {
     if (propagate(pre, h, D, HYP_ROUNDS)) { pre.dead.set(s, { pos: b.pos, crossed: b.crossed }); continue; }
     survivors.push({ s, D });
   }
+  // Extra Extreme: refute the remaining hypotheses with the full deduction engine (depth-1 what-ifs)
+  if (pre.p.tier === 'ultra') {
+    for (let i = survivors.length - 1; i >= 0; i--) {
+      const sv = survivors[i] as { s: number; D: number[][] };
+      const w = worldFor(pre, sv.s);
+      if (!w) continue;
+      if (deduceDeepFrom(w.prob, w.act, cloneDomains(sv.D), ULTRA_K1, ULTRA_K2).status === 'contradiction') {
+        pre.dead.set(sv.s, { pos: b.pos, crossed: b.crossed });
+        survivors.splice(i, 1);
+      }
+    }
+  }
   if (survivors.length === 0) {
     return toDeduction(pre, {
       kind: 'mistake', p: cands[0] ?? 0, cells: [], reason: [], rule: 'mistake-liar',
@@ -1595,4 +1643,184 @@ function probeRefine(pre: Pre, h: Hyp, D: number[][]): boolean {
     }
   }
   return true;
+}
+
+// ─────────────────────────── Extra Extreme: new global clues ───────────────────────────
+
+/** Eliminations (and Otto's wording) for the Extra Extreme global predicates (extra.ts revisers). */
+function extraElims(pre: Pre, cc: CC, D: number[][], tk: TK | null): Elim[] {
+  const s = cc.owner;
+  const pr = cc.pred;
+  const other = pr.type === 'crowdedThan' ? pre.ctx.personIndex.get(pr.personId) ?? -1 : -1;
+  const r = reviseExtra(pr, s, other, D, pre.g);
+  if (r === 'contra') return [{ p: s, cells: [], reason: [], why: '', tail: '', contra: true }];
+  if (!tk) return r.map((e) => ({ p: e.p, cells: e.cells, reason: [], why: '', tail: '' }));
+  const e = r[0];
+  if (!e) return [];
+  const g = pre.g;
+  const said = tk.said(cc);
+  const S = tk.name(s), PS = tk.pr(s);
+  const Q = tk.name(e.p), PQ = tk.pr(e.p);
+  const cells = tk.cells(e.cells, 'or');
+  const outFor = `So ${tk.cells(e.cells)} ${tk.isAre(e.cells)} out for ${e.p === s ? PS.him : Q}.`;
+  const verb = pr.type === 'seeCount' || pr.type === 'seenByNobody' ? `see ${PS.him}`
+    : pr.type === 'noDiagonalNeighbour' ? `stand diagonally beside ${PS.him}`
+      : pr.type === 'closestToKind' ? `be as close to ${tk.furnA(pr.kind)}` : '';
+  const at = (D[s] as number[]).length === 1 ? tk.cell((D[s] as number[])[0] as number) : '';
+  let why = '', tail = outFor;
+  const reason: number[] = [];
+  switch (e.mode) {
+    case 'own-few':
+      why = `${said}, but from ${cells} not enough people could ${verb}.`;
+      break;
+    case 'own-dead':
+      why = `${said}, but from ${cells} ${PS.he} would leave ${tk.name(e.who[0] as number)} without a free row or column.`;
+      break;
+    case 'own-many': {
+      const W = tk.names(e.who);
+      why = `${said}, but from ${cells} ${W} would ${verb} wherever ${e.who.length === 1 ? tk.pr(e.who[0] as number).he : 'they'} stood.`;
+      for (const q of e.who) reason.push(...(D[q] as number[]).slice(0, 6));
+      break;
+    }
+    case 'cap':
+      why = e.who.length
+        ? `${said}; ${S} is at ${at}, and ${tk.names(e.who)} already ${e.who.length === 1 ? 'does' : 'do'}.`
+        : `${said}, and ${S} is at ${at}.`;
+      tail = `So ${Q} can't be at ${cells}.`;
+      reason.push((D[s] as number[])[0] as number);
+      break;
+    case 'fill':
+      why = `${said}; ${S} is at ${at}, and every one who still could has to.`;
+      tail = `So ${Q} can't be at ${cells}.`;
+      reason.push((D[s] as number[])[0] as number);
+      break;
+    case 'own-base':
+      why = `${said}, so ${PS.he} was on a piece of furniture.`;
+      break;
+    case 'only': {
+      const R = g.roomOf[e.cells[0] as number] as number;
+      if (e.p === s) {
+        const W = e.who[0] as number;
+        why = `${said}, but ${tk.name(W)} is bound to be on furniture in the ${tk.room(R)}.`;
+        reason.push(...(D[W] as number[]));
+      } else {
+        why = `${said}, and ${S} is in the ${tk.room(R)}.`;
+        tail = `Nobody else there was on furniture: ${tk.cells(e.cells)} ${tk.isAre(e.cells)} out for ${Q}.`;
+      }
+      break;
+    }
+    case 'crowd': {
+      const R = g.roomOf[e.cells[0] as number] as number;
+      const X = tk.name(e.who[0] as number);
+      why = e.p === s
+        ? `${said}, but the ${tk.room(R)} can't end up holding more people than ${X}'s room.`
+        : `${said}, but ${S}'s room can't end up holding more people than the ${tk.room(R)} if ${PQ.he} is there.`;
+      break;
+    }
+  }
+  return [{ p: e.p, cells: e.cells, reason, why, tail }];
+}
+
+// ─────────────────────────── Extra Extreme: deep what-if ───────────────────────────
+
+const worldCache = new WeakMap<Puzzle, World[]>();
+
+/** The solver world of a hypothesis (-2: no liar; s: suspect s lies); null for the liar-unknown view. */
+function worldFor(pre: Pre, liar: number): World | null {
+  if (liar === -1) return null;
+  let ws = worldCache.get(pre.p);
+  if (!ws) { ws = puzzleWorlds(pre.p); worldCache.set(pre.p, ws); }
+  return ws.find((w) => (liar === -2 ? w.liar === null : w.liar === liar)) ?? null;
+}
+
+/**
+ * Fallback what-if for Extra Extreme cases, backed by the full deduction
+ * engine (solver.ts): a depth-1 trial pin on anybody, then the depth-2 step
+ * "if X stood here, Y would have no workable square". The generator certifies
+ * every Extra Extreme case with exactly these steps, so Otto never stalls.
+ */
+function deepWhatIf(tk: TK, D: number[][], onlyDepth2 = false): Finding | null {
+  const { pre, b, h } = tk;
+  const w = worldFor(pre, h.liar);
+  if (!w) return null;
+  const Dp: Domains = cloneDomains(D);
+  if (!solverPropagate(w.prob, w.act, Dp)) {
+    return {
+      kind: 'mistake', p: 0, cells: [], reason: [], rule: 'mistake-stuck',
+      text: 'Follow the clues through and the plan falls apart. One of your pins or crosses is wrong.',
+    };
+  }
+  const order: number[] = [];
+  for (let q = 0; q < pre.n; q++) if ((b.pos[q] as number) < 0 && (D[q] as number[]).length >= 2) order.push(q);
+  order.sort((x, y) => (D[x] as number[]).length - (D[y] as number[]).length || x - y);
+  // depth 1: squares the propagation already rules out, then trial pins
+  const depth1 = (q: number, c: number): Finding => {
+    const N = tk.name(q), C = tk.cell(c);
+    const Dc = cloneD(D);
+    Dc[q] = [c];
+    const contra = propagate(pre, h, Dc, 40);
+    let what = 'follow the clues a few moves on and somebody runs out of squares';
+    let reason: number[] = [c];
+    if (contra?.kind === 'person') {
+      what = contra.p === q ? `${tk.pr(q).he} would contradict ${tk.pr(q).himself}` : `${tk.name(contra.p)} would end up with nowhere to stand`;
+      reason = [c, ...(D[contra.p] as number[]).slice(0, 8)];
+    } else if (contra?.kind === 'rule') {
+      what = brokenWhat(tk, contra.cc);
+    } else if (contra?.kind === 'line') {
+      what = `nobody could reach ${tk.line(contra.axis, contra.l)}`;
+    }
+    return {
+      kind: 'cross', p: q, cells: [c], reason, rule: 'what-if',
+      text: tk.pick([`If ${N} stood at ${C}, ${what}. Cross ${C} for ${N}.`, `Try ${N} at ${C}: ${what}. So not there.`], 'deep1', q, c),
+    };
+  };
+  for (const q of onlyDepth2 ? [] : order) {
+    const keep = new Set(Dp[q] as number[]);
+    const gone = (D[q] as number[]).find((c) => !keep.has(c));
+    if (gone !== undefined) return depth1(q, gone);
+  }
+  for (const q of onlyDepth2 ? [] : order) {
+    for (const c of Dp[q] as number[]) {
+      const Dc = cloneDomains(Dp);
+      Dc[q] = [c];
+      if (!solverPropagate(w.prob, w.act, Dc, [q])) return depth1(q, c);
+    }
+  }
+  // depth 2
+  for (const q of order) {
+    const dq = Dp[q] as number[];
+    if (dq.length < 2 || dq.length > ULTRA_K2) continue;
+    for (const c of dq) {
+      if (!failsAtDepth2(w.prob, w.act, Dp, q, c, ULTRA_K1)) continue;
+      const Dc = cloneDomains(Dp);
+      Dc[q] = [c];
+      solverPropagate(w.prob, w.act, Dc, [q]);
+      const r = someoneStuck(w.prob, w.act, Dc, ULTRA_K1, q);
+      if (r < 0) continue;
+      const N = tk.name(q), C = tk.cell(c), R = tk.name(r), PR = tk.pr(r);
+      const left = Dc[r] as number[];
+      return {
+        kind: 'cross', p: q, cells: [c], reason: [c, ...left], rule: 'what-if-2',
+        text: tk.pick([
+          `If ${N} stood at ${C}, ${R} would be stuck: every square ${PR.he} has left (${tk.cells(left)}) breaks the plan in turn. Cross ${C} for ${N}.`,
+          `Suppose ${N} is at ${C}; then try each square left for ${R} (${tk.cells(left)}) and every one of them falls apart. So ${N} isn't at ${C}.`,
+        ], 'deep2', q, c),
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * The solver-backed what-if on its own (Extra Extreme fallback; exposed for tests). Same contract as
+ * `nextDeduction` but skips every other technique; null when it finds nothing (or the case lies).
+ */
+export function deepWhatIfStep(p: Puzzle, state: OttoState, onlyDepth2 = false): Deduction | null {
+  const pre = getPre(p);
+  if (pre.liarVariant) return null;
+  const b = readBoard(pre, state);
+  const h = getHyp(pre, -2);
+  const tk = new TK(pre, b, h);
+  const f = deepWhatIf(tk, domains(pre, b, h), onlyDepth2);
+  return f ? toDeduction(pre, f) : null;
 }

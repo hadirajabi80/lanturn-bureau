@@ -128,7 +128,22 @@ function Key({ k, label }: { k: Tok['k']; label: string }) {
   );
 }
 
-export function ScenarioExplainer({ variant, open, onClose, isNew }: { variant: Variant; open: boolean; onClose: () => void; isNew: boolean }) {
+export function ScenarioExplainer({
+  variant,
+  open,
+  onClose,
+  isNew,
+  attic,
+  onAtticRules,
+}: {
+  variant: Variant;
+  open: boolean;
+  onClose: () => void;
+  isNew: boolean;
+  /** Extra Extreme case: add the attic reminders (and a link to the full card) */
+  attic?: boolean;
+  onAtticRules?: () => void;
+}) {
   const meta = VARIANT_META[variant];
   const accomplice = variant.includes('ccomplice');
   const liar = DIAGRAMS[variant].people.some((p) => p.liar);
@@ -168,6 +183,17 @@ export function ScenarioExplainer({ variant, open, onClose, isNew }: { variant: 
             )}
           </div>
           <p className="mt-2 text-[13px] text-[var(--fp-muted)]">One person per row and per column, always.</p>
+          {attic && (
+            <p className="mt-2 rounded-md px-3 py-2 text-[13px] leading-snug text-[var(--attic-ink)] fp-attic">
+              <b>Extra Extreme:</b> no coordinates. “Could see” is a clear row, column or diagonal (blocking furniture cuts it, people don’t);
+              “beside” a person is diagonal; “closer” counts steps; an “if… then…” with a false first part is true.{' '}
+              {onAtticRules && (
+                <button type="button" onClick={onAtticRules} className="font-semibold text-[var(--attic-red-ink)] underline underline-offset-2">
+                  More
+                </button>
+              )}
+            </p>
+          )}
           <div className="mt-5 flex justify-end">
             <BrassBtn onClick={onClose} data-autofocus>
               Understood

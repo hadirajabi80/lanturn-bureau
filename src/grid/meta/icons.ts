@@ -1,7 +1,8 @@
 /** lucide-react icon maps for achievements, scenarios and districts (named imports only). */
 import {
   Anchor, Award, Building2, Cake, CalendarCheck, Castle, Coffee, Copy, Crosshair, Crown, Drama, FerrisWheel, FlameKindling,
-  Flame, FlaskConical, Footprints, Gavel, Gem, Globe, GraduationCap, Hotel, Landmark, Layers, Leaf, Lock, Map, Medal,
+  Flame, FlaskConical, Footprints, Gavel, Gem, Globe, GraduationCap, Hotel, KeyRound, Landmark, Layers, Leaf, Lock, LockKeyhole, Map,
+  MapPinOff, Medal,
   Moon, PencilOff, Pin, Ruler, Shield, Skull, Sparkles, Star, Swords, Telescope, Timer, TrainFront, Trophy, UserX, Users,
   Zap, type LucideIcon,
 } from 'lucide-react';
@@ -16,7 +17,7 @@ export const ACHIEVEMENT_ICONS: Record<AchievementIconName, LucideIcon> = {
   ...DISTRICT_ICONS, // includes Zap and Gem
   Pin, Sparkles, Drama, Users, Copy, Lock, FlaskConical, Crosshair, Crown, Moon, PencilOff, Shield, Timer,
   Building2, Flame, FlameKindling, Coffee, Ruler, Globe, Award, Medal, Trophy, CalendarCheck, Leaf, Layers, Map,
-  Star, Footprints, Gavel,
+  Star, Footprints, Gavel, KeyRound, LockKeyhole, MapPinOff, Skull,
 };
 
 export const VARIANT_ICONS: Record<Variant, LucideIcon> = {

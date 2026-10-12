@@ -24,6 +24,7 @@
 import type { Predicate } from '../types';
 import type { PosFn, PuzzleCtx } from './predicates';
 import { compilePredicate, isGlobalPredicate, predicatePeople } from './predicates';
+import { isExtraGlobal, reviseExtra } from './extra';
 
 /**
  * A global constraint that is not a clue predicate (variant rules such as
@@ -301,6 +302,16 @@ export function propagate(prob: Problem, act: Uint8Array, D: Domains, dirty?: nu
       return v === 0 ? -1 : changed;
     }
     const p = cl.pred;
+    if (isExtraGlobal(p)) {
+      const other = p.type === 'crowdedThan' ? (prob.ctx.personIndex.get(p.personId) ?? -1) : -1;
+      const r = reviseExtra(p, s, other, D, g);
+      if (r === 'contra') return -1;
+      for (const e of r) {
+        const bad = new Set(e.cells);
+        if (!restrictTo(e.p, (c) => !bad.has(c))) return -1;
+      }
+      return changed;
+    }
     if (p.type === 'aloneInRoom' || p.type === 'roomCount') {
       canBe.fill(0);
       summarize();
@@ -427,14 +438,138 @@ export function deduce(prob: Problem, act: Uint8Array, probeMax: number): { stat
   return { status: allSingle(D) ? 'solved' : 'stuck', D };
 }
 
+// ─────────────────────────── depth-2 what-if (Extra Extreme) ───────────────────────────
+
+/**
+ * A person r (2..k1 candidate cells) for whom every cell collapses under
+ * propagation — "whatever r does, the plan falls apart". -1 when none.
+ * This is the inner step of a depth-2 what-if (and exactly what Otto explains).
+ */
+export function someoneStuck(prob: Problem, act: Uint8Array, D: Domains, k1: number, skip = -1): number {
+  const order: number[] = [];
+  for (let r = 0; r < prob.n; r++) {
+    const len = (D[r] as number[]).length;
+    if (r !== skip && len >= 2 && len <= k1) order.push(r);
+  }
+  order.sort((a, b) => (D[a] as number[]).length - (D[b] as number[]).length || a - b);
+  for (const r of order) {
+    let all = true;
+    for (const d of D[r] as number[]) {
+      const Dd = cloneDomains(D);
+      Dd[r] = [d];
+      if (propagate(prob, act, Dd, [r])) { all = false; break; }
+    }
+    if (all) return r;
+  }
+  return -1;
+}
+
+/** Depth-2 what-if on (p, c): the trial pin survives propagation but leaves somebody with no workable square. */
+export function failsAtDepth2(prob: Problem, act: Uint8Array, D: Domains, p: number, c: number, k1: number): boolean {
+  const Dc = cloneDomains(D);
+  Dc[p] = [c];
+  if (!propagate(prob, act, Dc, [p])) return true;
+  return someoneStuck(prob, act, Dc, k1, p) >= 0;
+}
+
+/**
+ * Deduction with depth-1 probing (people with ≤ k1 cells, chained) plus
+ * depth-2 what-if (trial pins on people with ≤ k2 cells; refuted when some
+ * person with ≤ k1 cells is then left without a workable square).
+ */
+export function deduceDeep(prob: Problem, act: Uint8Array, k1: number, k2: number): { status: DeduceStatus; D: Domains } {
+  return deduceDeepFrom(prob, act, initialDomains(prob, act), k1, k2);
+}
+
+/** deduceDeep starting from given domains (modified in place). */
+export function deduceDeepFrom(prob: Problem, act: Uint8Array, D: Domains, k1: number, k2: number): { status: DeduceStatus; D: Domains } {
+  if (!propagate(prob, act, D) || !probe(prob, act, D, k1)) return { status: 'contradiction', D };
+  if (allSingle(D)) return { status: 'solved', D };
+  if (k2 < 2) return { status: 'stuck', D };
+  for (;;) {
+    let progress = false;
+    const order: number[] = [];
+    for (let p = 0; p < prob.n; p++) {
+      const len = (D[p] as number[]).length;
+      if (len >= 2 && len <= k2) order.push(p);
+    }
+    order.sort((a, b) => (D[a] as number[]).length - (D[b] as number[]).length || a - b);
+    for (const p of order) {
+      const bad = (D[p] as number[]).filter((c) => failsAtDepth2(prob, act, D, p, c, k1));
+      if (!bad.length) continue;
+      const nd = (D[p] as number[]).filter((c) => !bad.includes(c));
+      if (!nd.length) return { status: 'contradiction', D };
+      D[p] = nd;
+      if (!propagate(prob, act, D, [p]) || !probe(prob, act, D, k1)) return { status: 'contradiction', D };
+      progress = true;
+      break;
+    }
+    if (allSingle(D)) return { status: 'solved', D };
+    if (!progress) return { status: 'stuck', D };
+  }
+}
+
+/**
+ * Human-order solve that counts what-if steps: propagate to a fixpoint; else
+ * one depth-1 what-if pass on the most constrained person (each refuted cell =
+ * one step of depth 1); else one depth-2 refutation (one step of depth 2).
+ * `steps[i]` = depth of the i-th what-if step.
+ */
+export function gradedSolve(prob: Problem, act: Uint8Array, k1: number, k2: number): { status: DeduceStatus; D: Domains; steps: number[] } {
+  const D = initialDomains(prob, act);
+  const steps: number[] = [];
+  if (!propagate(prob, act, D)) return { status: 'contradiction', D, steps };
+  for (let guard = 0; guard < 4000; guard++) {
+    if (allSingle(D)) return { status: 'solved', D, steps };
+    const order: number[] = [];
+    for (let p = 0; p < prob.n; p++) {
+      const len = (D[p] as number[]).length;
+      if (len >= 2 && len <= Math.max(k1, k2)) order.push(p);
+    }
+    order.sort((a, b) => (D[a] as number[]).length - (D[b] as number[]).length || a - b);
+    let done = false;
+    // depth 1
+    for (const p of order) {
+      if ((D[p] as number[]).length > k1) continue;
+      const bad: number[] = [];
+      for (const c of D[p] as number[]) {
+        const Dc = cloneDomains(D);
+        Dc[p] = [c];
+        if (!propagate(prob, act, Dc, [p])) bad.push(c);
+      }
+      if (!bad.length) continue;
+      for (let i = 0; i < bad.length; i++) steps.push(1);
+      D[p] = (D[p] as number[]).filter((c) => !bad.includes(c));
+      if (!(D[p] as number[]).length || !propagate(prob, act, D, [p])) return { status: 'contradiction', D, steps };
+      done = true;
+      break;
+    }
+    if (done) continue;
+    // depth 2
+    for (const p of order) {
+      if ((D[p] as number[]).length > k2) continue;
+      const c = (D[p] as number[]).find((x) => failsAtDepth2(prob, act, D, p, x, k1));
+      if (c === undefined) continue;
+      steps.push(2);
+      D[p] = (D[p] as number[]).filter((x) => x !== c);
+      if (!propagate(prob, act, D, [p])) return { status: 'contradiction', D, steps };
+      done = true;
+      break;
+    }
+    if (!done) return { status: 'stuck', D, steps };
+  }
+  return { status: 'stuck', D, steps };
+}
+
 /**
  * Exhaustive backtracking over people. Returns up to `limit` solutions as
  * position arrays (person index → cell index).
  */
-export function search(prob: Problem, act: Uint8Array, limit: number): Int16Array[] {
+/** `from`: start from these (already sound, e.g. deduced) domains instead of the initial ones. */
+export function search(prob: Problem, act: Uint8Array, limit: number, from?: Domains): Int16Array[] {
   const { n, clues, rowAt, colAt } = prob;
   const g = prob.ctx.grid;
-  const D = initialDomains(prob, act);
+  const D = from ? cloneDomains(from) : initialDomains(prob, act);
   const results: Int16Array[] = [];
   if (!propagate(prob, act, D)) return results;
   const allRows = (1 << g.rows) - 1, allCols = (1 << g.cols) - 1;
@@ -504,4 +639,62 @@ export function search(prob: Problem, act: Uint8Array, limit: number): Int16Arra
   };
   rec(0);
   return results;
+}
+
+/**
+ * Exhaustive search that maintains propagation at every node (MAC). Slower per
+ * node than `search` but explores far fewer nodes on clue sets that are mostly
+ * relational (Extra Extreme). Same answers: up to `limit` solutions. `first`: a known solution whose
+ * cells are tried first (a second solution usually differs from it in a few people, so backtracking finds it fast).
+ */
+export function searchMAC(prob: Problem, act: Uint8Array, limit: number, from?: Domains, first?: Int16Array): Int16Array[] {
+  return searchMACBounded(prob, act, limit, from, first, Infinity).sols;
+}
+
+/**
+ * searchMAC with a node budget: `complete` = false when the budget ran out (then `sols` may be short).
+ * `shuffle` (0..1 generator): random value order — restarts with growing budgets tame heavy-tailed searches.
+ */
+export function searchMACBounded(
+  prob: Problem, act: Uint8Array, limit: number, from: Domains | undefined, first: Int16Array | undefined, maxNodes: number,
+  shuffle?: () => number,
+): { sols: Int16Array[]; complete: boolean } {
+  const D0 = from ? cloneDomains(from) : initialDomains(prob, act);
+  const results: Int16Array[] = [];
+  let nodes = 0, complete = true;
+  if (!propagate(prob, act, D0)) return { sols: results, complete };
+  const nonUnary: CClue[] = prob.clues.filter((cl, ci) => act[ci] && !cl.unary);
+  const rec = (D: Domains): boolean => {
+    let best = -1;
+    for (let p = 0; p < prob.n; p++) {
+      const len = (D[p] as number[]).length;
+      if (len > 1 && (best < 0 || len < (D[best] as number[]).length)) best = p;
+    }
+    if (best < 0) {
+      const pos = new Int16Array(prob.n);
+      for (let p = 0; p < prob.n; p++) pos[p] = (D[p] as number[])[0] as number;
+      for (let p = 0; p < prob.n; p++) for (let q = p + 1; q < prob.n; q++) {
+        if (prob.rowAt[pos[p] as number] === prob.rowAt[pos[q] as number] || prob.colAt[pos[p] as number] === prob.colAt[pos[q] as number]) return false;
+      }
+      for (const cl of nonUnary) if (cl.f(pos) !== 1) return false;
+      results.push(pos);
+      return results.length >= limit;
+    }
+    let vals = D[best] as number[];
+    if (first) { const l = first[best] as number; vals = [...vals.filter((c) => c === l), ...vals.filter((c) => c !== l)]; }
+    else if (shuffle) {
+      vals = vals.slice();
+      for (let i = vals.length - 1; i > 0; i--) { const j = Math.floor(shuffle() * (i + 1)); const t = vals[i] as number; vals[i] = vals[j] as number; vals[j] = t; }
+    }
+    for (const c of vals) {
+      if (++nodes > maxNodes) { complete = false; return true; }
+      const Dc = cloneDomains(D);
+      Dc[best] = [c];
+      if (!propagate(prob, act, Dc, [best])) continue;
+      if (rec(Dc)) return true;
+    }
+    return false;
+  };
+  rec(D0);
+  return { sols: results, complete };
 }

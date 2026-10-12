@@ -270,3 +270,71 @@ button.fp-chip:hover { background: color-mix(in srgb, var(--fp-hl) 45%, white); 
 .fp-cloud { animation: fp-cloud 40s ease-in-out infinite alternate; }
 @keyframes fp-cloud { from { transform: translateX(-8%); } to { transform: translateX(8%); } }
 
+
+/* ───────── The sealed attic (tier `ultra`, "Extra Extreme") ─────────
+ * Crimson on black: the one place the printed case file goes dark. Light-mood districts get a dark plum
+ * version. Tokens: --attic-bg / --attic-ink / --attic-red / --attic-muted / --attic-line. */
+.fp-root {
+  --attic-bg: #140d0f;
+  --attic-bg2: #22141a;
+  --attic-ink: #f6ece8;
+  --attic-red: #d4213d;
+  --attic-red-ink: #ff5c74;
+  --attic-muted: #b9a2a6;
+  --attic-line: #43262d;
+}
+.fp-root[data-district-mood='light'] {
+  --attic-bg: #35152f;
+  --attic-bg2: #4a1f42;
+  --attic-ink: #fbeff6;
+  --attic-red: #e8336b;
+  --attic-red-ink: #ff86ad;
+  --attic-muted: #dcb9d0;
+  --attic-line: #5e2b55;
+}
+.fp-attic {
+  color: var(--attic-ink);
+  background:
+    repeating-linear-gradient(135deg, transparent 0 9px, color-mix(in srgb, var(--attic-red) 9%, transparent) 9px 10px),
+    var(--attic-bg);
+}
+.fp-attic-plate {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border-radius: 4px;
+  padding: 0.15rem 0.45rem;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.15;
+  white-space: nowrap;
+  color: #fff;
+  background: var(--attic-red);
+  box-shadow: inset 0 0 0 1.5px var(--fp-ink);
+}
+.fp-attic-filament.fp-filament { background: var(--attic-bg2); box-shadow: inset 0 0 0 1.5px var(--attic-line); }
+.fp-attic-filament.fp-filament > span { background: var(--attic-red); box-shadow: none; }
+
+/* sealed case card (Extra Extreme rack) */
+.fp-keytag--sealed {
+  --fp-muted: var(--attic-muted);
+  color: var(--attic-ink);
+  background: var(--attic-bg);
+  box-shadow: inset 0 0 0 2px var(--fp-ink), inset 0 0 0 4px var(--attic-red), var(--fp-shadow);
+}
+.fp-keytag--sealed::before { background: var(--attic-red); box-shadow: inset 0 0 0 1.5px var(--fp-ink); }
+.fp-keytag--sealed[data-status='new'] { color: var(--attic-ink); }
+.fp-keytag--sealed[data-status='progress'] {
+  background: linear-gradient(0deg, color-mix(in srgb, var(--fp-hl) 22%, transparent), transparent 60%), var(--attic-bg);
+}
+.fp-keytag--sealed[data-status='solved'] {
+  background: linear-gradient(0deg, color-mix(in srgb, var(--fp-green) 38%, transparent), transparent 70%), var(--attic-bg);
+}
+.fp-keytag--sealed:hover,
+.fp-keytag--sealed:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--fp-ink), inset 0 0 0 4px var(--attic-red), 4px 4px 0 var(--fp-ink);
+}
+.fp-keytag--sealed:active { box-shadow: inset 0 0 0 2px var(--fp-ink), inset 0 0 0 4px var(--attic-red); }
+.fp-keytag__seal { color: var(--attic-red-ink); }

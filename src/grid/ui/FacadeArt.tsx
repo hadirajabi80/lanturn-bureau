@@ -2,7 +2,7 @@ import { memo, useId, useMemo, type CSSProperties } from 'react';
 import { mix, shade } from '@/components/avatar/color';
 import { getDistrict, DISTRICTS } from '@/grid/skins/districts';
 import type { District } from '@/grid/skins/types';
-import { grid, rng, type Ctx, type Spec, type Win } from './facadeKit';
+import { grid, rng, type Box, type Ctx, type Spec, type Win } from './facadeKit';
 import { boutique, carnival, cottage } from './FacadeLight';
 import { isLightDistrict } from './skin';
 
@@ -23,7 +23,8 @@ export interface FacadeArtProps {
   litFraction?: number;
   /** Explicit per-window lit state (index = row * windowsPerFloor + col, row 0 = ground). */
   litWindows?: boolean[];
-  /** Tier index 0..4 (0 = Rookie / ground … 4 = Mastermind / roof): that storey band is highlighted. */
+  /** Tier index 0..5 (0 = Rookie / ground … 4 = Mastermind / roof, 5 = Extra Extreme / the sealed attic above the
+   *  top window row): that storey band is highlighted (the attic in crimson). */
   highlightFloor?: number;
   /** CSS height (px number or any CSS length). Width follows the facade's aspect ratio. */
   height?: number | string;
@@ -86,7 +87,7 @@ function manor(f: number, n: number, k: Ctx): Spec {
       <rect x={20} y={G - 6} width={280} height={6} fill={k.bodyDark} />
     </>
   );
-  return { W, H, G, back, windows: grid(34, 104, 286, 204, f, n, 0.5, 0.62) };
+  return { W, H, G, back, windows: grid(34, 104, 286, 204, f, n, 0.5, 0.62), attic: { x: 118, y: 36, w: 84, h: 46 } };
 }
 
 function lighthouse(f: number, n: number, k: Ctx): Spec {
@@ -150,7 +151,7 @@ function lighthouse(f: number, n: number, k: Ctx): Spec {
       <circle cx={cx} cy={13} r={2} fill={k.trim} />
     </>
   );
-  return { W, H, G, back, windows };
+  return { W, H, G, back, windows, attic: { x: 62, y: 30, w: 46, h: 56 } };
 }
 
 function tower(f: number, n: number, k: Ctx): Spec {
@@ -180,7 +181,7 @@ function tower(f: number, n: number, k: Ctx): Spec {
       <rect x={20} y={G - 4} width={150} height={4} fill={k.p.accent} opacity={0.6} />
     </>
   );
-  return { W, H, G, back, windows: grid(x0, 118, x1, 300, f, n, 0.46, 0.66) };
+  return { W, H, G, back, windows: grid(x0, 118, x1, 300, f, n, 0.46, 0.66), attic: { x: 50, y: 46, w: 90, h: 64 } };
 }
 
 function museum(f: number, n: number, k: Ctx): Spec {
@@ -225,7 +226,7 @@ function museum(f: number, n: number, k: Ctx): Spec {
       ))}
     </>
   );
-  return { W, H, G, back, front, windows };
+  return { W, H, G, back, front, windows, attic: { x: 64, y: 30, w: 202, h: 46 } };
 }
 
 function skyline(f: number, n: number, k: Ctx): Spec {
@@ -299,7 +300,7 @@ function skyline(f: number, n: number, k: Ctx): Spec {
       </text>
     </g>
   );
-  return { W, H, G, back, front, windows };
+  return { W, H, G, back, front, windows, attic: { x: 110, y: 36, w: 84, h: 30 } };
 }
 
 function gothic(f: number, n: number, k: Ctx): Spec {
@@ -325,7 +326,7 @@ function gothic(f: number, n: number, k: Ctx): Spec {
       ))}
     </>
   );
-  return { W, H, G, back, windows: grid(36, 130, 264, 250, f, n, 0.4, 0.68, 'arch') };
+  return { W, H, G, back, windows: grid(36, 130, 264, 250, f, n, 0.4, 0.68, 'arch'), attic: { x: 120, y: 30, w: 60, h: 92 } };
 }
 
 function train(f: number, n: number, k: Ctx): Spec {
@@ -409,7 +410,7 @@ function train(f: number, n: number, k: Ctx): Spec {
       ])}
     </>
   );
-  return { W, H, G, back, front, windows };
+  return { W, H, G, back, front, windows, attic: { x: 130, y: 70, w: 328, h: 15 } };
 }
 
 function dome(f: number, n: number, k: Ctx): Spec {
@@ -444,12 +445,27 @@ function dome(f: number, n: number, k: Ctx): Spec {
       <rect x={26} y={124} width={198} height={5} fill={k.bodyDark} />
     </>
   );
-  return { W, H, G, back, windows: grid(42, 136, 208, 206, f, n, 0.42, 0.6, 'arch') };
+  return { W, H, G, back, windows: grid(42, 136, 208, 206, f, n, 0.42, 0.6, 'arch'), attic: { x: 78, y: 42, w: 94, h: 62 } };
 }
 
 const SHAPES: Record<Shape, (f: number, n: number, k: Ctx) => Spec> = {
   manor, lighthouse, tower, museum, skyline, gothic, train, dome, cottage, boutique, carnival,
 };
+
+/** Tier index of the sealed attic (Extra Extreme): highlighted as the roof box above the top window row. */
+const ATTIC = 5;
+
+/** Fallback attic box: a band just above the top window row. */
+function atticFallback(windows: Win[]): Box | null {
+  if (!windows.length) return null;
+  const top = Math.max(...windows.map((w) => w.row));
+  const row = windows.filter((w) => w.row === top);
+  const y0 = Math.min(...row.map((w) => w.y));
+  const x0 = Math.min(...row.map((w) => w.x));
+  const x1 = Math.max(...row.map((w) => w.x + w.w));
+  const h = Math.max(10, Math.max(...row.map((w) => w.h)) * 1.4);
+  return { x: x0, y: Math.max(2, y0 - h - 6), w: x1 - x0, h };
+}
 
 /** Which window row(s) a tier band covers. */
 function rowInTier(row: number, floors: number, tier: number): boolean {
@@ -537,8 +553,10 @@ function FacadeArtImpl({
   const litCount = Math.round(Math.max(0, Math.min(1, litFraction)) * total);
   const isLit = (i: number) => (litWindows ? Boolean(litWindows[i]) : (order[i] as number) < litCount);
 
+  const attic = highlightFloor === ATTIC;
+  const atticBox = attic ? (spec.attic ?? atticFallback(spec.windows)) : null;
   const hi =
-    highlightFloor !== undefined && highlightFloor >= 0
+    highlightFloor !== undefined && highlightFloor >= 0 && !attic
       ? spec.windows.filter((w) => rowInTier(w.row, floors, highlightFloor))
       : [];
   const hiBox =
@@ -643,6 +661,34 @@ function FacadeArtImpl({
           strokeWidth={1.4}
           strokeDasharray="4 3"
         />
+      )}
+
+      {atticBox && (
+        <g>
+          <rect
+            x={atticBox.x}
+            y={atticBox.y}
+            width={atticBox.w}
+            height={atticBox.h}
+            rx={3}
+            fill={light ? '#35152F' : '#140D0F'}
+            fillOpacity={0.32}
+            stroke={light ? '#E8336B' : '#D4213D'}
+            strokeWidth={1.8}
+            strokeDasharray="5 3"
+          />
+          <rect
+            x={atticBox.x + 1.6}
+            y={atticBox.y + 1.6}
+            width={Math.max(0, atticBox.w - 3.2)}
+            height={Math.max(0, atticBox.h - 3.2)}
+            rx={2}
+            fill="none"
+            stroke={light ? '#35152F' : '#000000'}
+            strokeOpacity={0.55}
+            strokeWidth={0.8}
+          />
+        </g>
       )}
 
       {sky && <rect x={0} y={G} width={W} height={H - G} fill={light ? mix(p.muted, '#ffffff', 0.55) : shade(p.bg, -0.3)} />}

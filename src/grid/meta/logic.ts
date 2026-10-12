@@ -89,7 +89,7 @@ export function liveStreak(s: ProfileData['streak'], today: string = localISODat
 
 /** Is `id` a catalogue case of `district` (`<district>-<tier>-<n>`)? */
 export function isCatalogueCase(id: string, district: string): boolean {
-  const m = /^(.+)-(easy|medium|hard|extreme|mastermind)-(\d+)$/.exec(id);
+  const m = /^(.+)-(easy|medium|hard|extreme|mastermind|ultra)-(\d+)$/.exec(id);
   return !!m && m[1] === district;
 }
 

@@ -27,9 +27,12 @@ export const VARIANT_MIN_SIZE: Record<Variant, number> = {
   liarDouble: 9,
 };
 const VARIANTS = Object.keys(VARIANT_MIN_SIZE) as Variant[];
-const TIER_DEFAULT_SIZE: Record<Tier, number> = { easy: 5, medium: 6, hard: 8, extreme: 10, mastermind: 12 };
+const TIER_DEFAULT_SIZE: Record<Tier, number> = { easy: 5, medium: 6, hard: 8, extreme: 10, mastermind: 12, ultra: 10 };
 
 const SIZES = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
+/** Plan-size range per tier: the sealed attic (Extra Extreme) only comes in 8×8 – 12×12. */
+const sizeRange = (t: Tier): [number, number] => (t === 'ultra' ? [8, 12] : [4, 14]);
+const clampSize = (t: Tier, n: number) => Math.min(sizeRange(t)[1], Math.max(sizeRange(t)[0], n));
 const newSeed = () => Math.floor(Math.random() * 99999) + 1;
 
 export function CustomScreen() {
@@ -98,17 +101,17 @@ export function CustomScreen() {
               <div>
                 <input
                   type="range"
-                  min={4}
-                  max={14}
+                  min={sizeRange(tier)[0]}
+                  max={sizeRange(tier)[1]}
                   step={1}
                   value={size}
-                  onChange={(e) => setSize(Number(e.target.value))}
+                  onChange={(e) => setSize(clampSize(tier, Number(e.target.value)))}
                   aria-label="Plan size"
                   aria-valuetext={`${size} by ${size}`}
                   className="fpm-range"
                 />
                 <div className="flex justify-between px-[3px] font-mono text-xs" aria-hidden>
-                  {SIZES.map((n) => (
+                  {SIZES.filter((n) => n >= sizeRange(tier)[0] && n <= sizeRange(tier)[1]).map((n) => (
                     <span
                       key={n}
                       className={clsx('flex w-4 flex-col items-center gap-0.5 tabular-nums', n === size ? 'font-bold text-(--fp-ink)' : 'text-(--fp-muted)')}

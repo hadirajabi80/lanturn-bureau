@@ -10,6 +10,8 @@
  *  - each call must stay fast (≤ 15 ms on 12×12, measured as the max over calls).
  * Reports the % of cases Otto solves end-to-end per tier and variant, and
  * checks mistake detection on deliberately wrong boards. Exits 1 on failure.
+ * Extra Extreme: the first ULTRA_N (4) ultra cases of the first 4 districts must be solved
+ * end-to-end (100 %), with the deep what-if steps (rule what-if-2) explained.
  */
 import type { Cell, Predicate, Puzzle, Tier } from '../../types';
 import { cellKey } from '../../types';
@@ -30,10 +32,13 @@ try {
 const TIERS: Tier[] = ['easy', 'medium', 'hard', 'extreme', 'mastermind'];
 
 let districtIds: string[] = [];
+let ultraDistricts: string[] = [];
 try {
   const mod = await import('../../skins/districts');
   districtIds = mod.DISTRICTS.slice(0, 2).map((d) => d.id);
+  ultraDistricts = mod.DISTRICTS.slice(0, 4).map((d) => d.id);
 } catch { /* no districts yet */ }
+const ULTRA_N = Number(process.env.OTTO_ULTRA_N ?? 4);
 const SEASON_IDS = [...districtIds, 'files', 'files2'];
 const CASES = Number(process.env.OTTO_N ?? 6);
 
@@ -235,6 +240,59 @@ for (const sid of ['files', 'files2']) {
   }
 }
 
+// Extra Extreme: Otto must solve every sampled case end-to-end
+const ultraRow: Row = { n: 0, solved: 0, steps: 0, ms: 0, maxMs: 0 };
+const ultraRules: Record<string, number> = {};
+const ultraDeep: string[] = [];
+for (const sid of ultraDistricts) {
+  for (let i = 1; i <= ULTRA_N; i++) {
+    let p: Puzzle;
+    try { p = eng.generatePuzzle(sid, 'ultra', i); } catch (e) { fail(`ultra ${sid}/${i}: generation threw ${(e as Error).message}`); continue; }
+    const r = simulate(p, `${sid}/ultra/${i}`);
+    record(byVariant, `ultra/${p.variant ?? 'classic'}`, r);
+    ultraRow.n++;
+    if (r.solved) ultraRow.solved++;
+    else fail(`ultra ${sid}/${i} (${p.variant}): Otto stalled after ${r.steps} steps`);
+    ultraRow.steps += r.steps;
+    ultraRow.ms += r.totalMs / Math.max(1, r.calls);
+    ultraRow.maxMs = Math.max(ultraRow.maxMs, r.maxMs);
+    for (const [k, v] of Object.entries(r.rules)) { ultraRules[k] = (ultraRules[k] ?? 0) + v; rulesAll[k] = (rulesAll[k] ?? 0) + v; }
+    for (const [rule, t] of r.byRule) {
+      if (rule.endsWith('what-if-2') && ultraDeep.length < 4) ultraDeep.push(t);
+      const l = byRule.get(rule) ?? []; if (l.length < 3 && !l.includes(t)) l.push(t); byRule.set(rule, l);
+    }
+  }
+}
+
+// Extra Extreme depth-2 explanations ("If Felix stood at C3, Ivy would be stuck …"): Otto's simpler steps
+// usually get there first, so exercise the solver-backed depth-2 step directly every 5th move and check it is sound.
+let deep2 = 0;
+for (const sid of ultraDistricts.slice(0, 2)) {
+  for (let i = 1; i <= 2; i++) {
+    let p: Puzzle;
+    try { p = eng.generatePuzzle(sid, 'ultra', i); } catch { continue; }
+    const placements: Record<string, Cell | null> = {};
+    const crosses: Record<string, string[]> = {};
+    for (let step = 0; step < 3000; step++) {
+      const d2 = step % 5 === 0 ? eng.deepWhatIfStep(p, { placements, crosses }, true) : null;
+      const d = d2 ?? eng.nextDeduction(p, { placements, crosses });
+      if (!d) break;
+      if (d2) { deep2++; if (ultraDeep.length < 4) ultraDeep.push(d2.text); }
+      const sol = p.solution[d.personId];
+      if (d.kind === 'mistake') { fail(`deep ${p.id}: mistake ${d.text}`); break; }
+      if (d.kind === 'place') {
+        if (!same(d.cells[0] as Cell, sol)) { fail(`deep ${p.id}: WRONG PLACE ${d.text}`); break; }
+        placements[d.personId] = d.cells[0] as Cell;
+      } else {
+        if (d.cells.some((c) => same(c, sol))) { fail(`deep ${p.id}: CROSSED SOLUTION (${d.rule}) ${d.text}`); break; }
+        for (const c of d.cells) (crosses[cellKey(c)] ??= []).push(d.personId);
+      }
+    }
+    if (!p.people.every((x) => placements[x.id])) fail(`deep ${p.id}: not solved with depth-2 steps mixed in`);
+  }
+}
+if (ultraDistricts.length && deep2 === 0) fail('depth-2 what-if never produced a step');
+
 // ─────────────────────────── mistake detection ───────────────────────────
 
 function mistakeTests(): void {
@@ -321,6 +379,12 @@ console.log('\nby tier/variant:');
 for (const [k, r] of [...byVariant.entries()].sort()) console.log(line(k, r));
 if (liarRuns) console.log(line('synthetic liar*', liarRow));
 for (const [k, r] of [...scenarioRow.entries()].sort()) console.log(line(`synthetic ${k}`, r));
+if (ultraRow.n) {
+  console.log(line('ULTRA (Extra Extreme)', ultraRow));
+  console.log(`  ultra rules: ${Object.entries(ultraRules).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(' · ')}`);
+  console.log(`  depth-2 steps exercised: ${deep2}`);
+  for (const t of ultraDeep) console.log(`  deep: ${t}`);
+}
 console.log('  * synthetic liar boards are not unique under liar rules: soundness only, no coverage target');
 console.log('\nrules used:', Object.entries(rulesAll).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(' · '));
 console.log(`max ms per call on 12×12: ${maxMs12.toFixed(1)} · on >12×12: ${maxMsBig.toFixed(1)} · sizes seen: ${[...sizesSeen].sort((a, b) => a - b).join(",")}`);

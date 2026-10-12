@@ -12,6 +12,9 @@ import type { GridCtx, GridLike } from './geometry';
 import {
   buildGridCtx, cellIndex, colOf, diagAdjacent, isCorner, isEdge, lineOfSight, manhattan, rowOf, strictlyBetween,
 } from './geometry';
+import {
+  countEval, countSpecOf, kindDistance, largestRoomWith, roomAllOccupiable, roomsTouching, seesKindMask,
+} from './extra';
 
 export type Tri = 1 | 0 | -1;
 /** `pos[personIndex]` = flat cell index, or -1 when unplaced. */
@@ -46,6 +49,9 @@ export function predicatePeople(p: Predicate): string[] {
       return [p.personId];
     case 'between':
       return [p.a, p.b];
+    case 'crowdedThan': case 'closerToKindThan':
+      return [p.personId];
+    case 'ifThen': case 'xor': case 'and':
     case 'or': {
       const s = new Set([...predicatePeople(p.a), ...predicatePeople(p.b)]);
       return [...s];
@@ -61,7 +67,10 @@ export function predicatePeople(p: Predicate): string[] {
 export function isGlobalPredicate(p: Predicate): boolean {
   switch (p.type) {
     case 'aloneInRoom': case 'roomCount': return true;
-    case 'or': return isGlobalPredicate(p.a) || isGlobalPredicate(p.b);
+    case 'seeCount': case 'seenByNobody': case 'noDiagonalNeighbour': case 'closestToKind': case 'crowdedThan':
+    case 'onlyOnFurnitureInRoom':
+      return true;
+    case 'or': case 'ifThen': case 'xor': case 'and': return isGlobalPredicate(p.a) || isGlobalPredicate(p.b);
     case 'not': return isGlobalPredicate(p.p);
     default: return false;
   }
@@ -231,6 +240,107 @@ export function compilePredicate(p: Predicate, self: number, ctx: PuzzleCtx): Po
         const b = fb(pos);
         if (b === 1) return 1;
         return a === 0 && b === 0 ? 0 : -1;
+      };
+    }
+
+    // ── Extra Extreme
+    case 'seeCount': case 'seenByNobody': case 'noDiagonalNeighbour': case 'closestToKind': {
+      const cs = countSpecOf(p, g);
+      if (!cs) return () => 0;
+      return (pos) => countEval(cs, self, pos);
+    }
+    case 'crowdedThan': {
+      const x = who(p.personId);
+      if (x < 0 || x === self) return () => 0;
+      return (pos) => {
+        const a = pos[self] as number, b = pos[x] as number;
+        if (a < 0 || b < 0) return -1;
+        const Ra = g.roomOf[a], Rb = g.roomOf[b];
+        if (Ra === Rb) return 0;
+        let ka = 1, kb = 1, u = 0;
+        for (let q = 0; q < pos.length; q++) {
+          if (q === self || q === x) continue;
+          const c = pos[q] as number;
+          if (c < 0) u++;
+          else if (g.roomOf[c] === Ra) ka++;
+          else if (g.roomOf[c] === Rb) kb++;
+        }
+        if (ka - kb - u > 0) return 1;
+        if (ka + u - kb <= 0) return 0;
+        return -1;
+      };
+    }
+    case 'onlyOnFurnitureInRoom':
+      return (pos) => {
+        const c = pos[self] as number;
+        if (c < 0) return -1;
+        if (g.kindAt[c] === null) return 0;
+        const R = g.roomOf[c];
+        let unknown = false;
+        for (let q = 0; q < pos.length; q++) {
+          if (q === self) continue;
+          const d = pos[q] as number;
+          if (d < 0) unknown = true;
+          else if (g.roomOf[d] === R && g.kindAt[d] !== null) return 0;
+        }
+        return unknown ? -1 : 1;
+      };
+    case 'closerToKindThan': {
+      const dist = kindDistance(g, p.kind);
+      return binary(self, who(p.personId), (a, b) => (dist[a] as number) < (dist[b] as number));
+    }
+    case 'roomAllOccupiable':
+      return unary(self, (c) => roomAllOccupiable(g, g.roomOf[c] as number));
+    case 'roomHasButNot':
+      return unary(self, (c) => {
+        const ks = g.roomKinds[g.roomOf[c] as number] as Set<string>;
+        return ks.has(p.has) && !ks.has(p.not);
+      });
+    case 'largestRoomWith': {
+      const R = largestRoomWith(g, p.kind);
+      return unary(self, (c) => R >= 0 && g.roomOf[c] === R);
+    }
+    case 'roomTouches': {
+      const R = g.roomIndex.get(p.roomId) ?? -2;
+      const adj = roomsTouching(g);
+      return unary(self, (c) => g.roomOf[c] !== R && (adj[g.roomOf[c] as number] as Set<number>).has(R));
+    }
+    case 'canSeeKind': {
+      const m = seesKindMask(g, p.kind);
+      return unary(self, (c) => m[c] === 1);
+    }
+    case 'cannotSeeKind': {
+      const m = seesKindMask(g, p.kind);
+      return unary(self, (c) => m[c] !== 1);
+    }
+    case 'ifThen': {
+      const fa = compilePredicate(p.a, self, ctx), fb = compilePredicate(p.b, self, ctx);
+      return (pos) => {
+        const a = fa(pos);
+        if (a === 0) return 1;
+        const b = fb(pos);
+        if (b === 1) return 1;
+        return a === 1 && b === 0 ? 0 : -1;
+      };
+    }
+    case 'xor': {
+      const fa = compilePredicate(p.a, self, ctx), fb = compilePredicate(p.b, self, ctx);
+      return (pos) => {
+        const a = fa(pos);
+        if (a < 0) return -1;
+        const b = fb(pos);
+        if (b < 0) return -1;
+        return a !== b ? 1 : 0;
+      };
+    }
+    case 'and': {
+      const fa = compilePredicate(p.a, self, ctx), fb = compilePredicate(p.b, self, ctx);
+      return (pos) => {
+        const a = fa(pos);
+        if (a === 0) return 0;
+        const b = fb(pos);
+        if (b === 0) return 0;
+        return a === 1 && b === 1 ? 1 : -1;
       };
     }
     case 'not': {

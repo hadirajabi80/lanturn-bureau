@@ -171,6 +171,7 @@ export type AchievementIconName =
   | 'Crown' | 'Moon' | 'Zap' | 'PencilOff' | 'Shield' | 'Timer' | 'Building2' | 'Flame'
   | 'FlameKindling' | 'Coffee' | 'Ruler' | 'Globe' | 'Award' | 'Medal' | 'Trophy' | 'Gem'
   | 'CalendarCheck' | 'Leaf' | 'Layers' | 'Map' | 'Star' | 'Footprints' | 'Gavel'
+  | 'KeyRound' | 'LockKeyhole' | 'MapPinOff' | 'Skull'
   | DistrictIconName;
 
 export interface RecordOutcome {

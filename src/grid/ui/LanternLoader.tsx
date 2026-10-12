@@ -10,13 +10,13 @@ const CYCLE = ORDER.length * STEP + 0.7;
  * Loading indicator (name kept from v2): a small 3×3 floor plan whose rooms are highlighted in one by one,
  * the last one in red. Reduced motion: a still, half-filled plan.
  */
-export function LanternLoader({ label = 'Opening the file…', size = 56 }: { label?: string; size?: number }) {
+export function LanternLoader({ label = 'Opening the file…', size = 56, tall = true }: { label?: string; size?: number; /** take half the viewport height (default) */ tall?: boolean }) {
   const reduced = useFpReduced();
   const cell = 14;
   const gap = 2;
   const W = cell * 3 + gap * 4;
   return (
-    <div role="status" aria-live="polite" className="flex min-h-[50dvh] flex-col items-center justify-center gap-3">
+    <div role="status" aria-live="polite" className={`flex flex-col items-center justify-center gap-3${tall ? ' min-h-[50dvh]' : ''}`}>
       <svg viewBox={`0 0 ${W} ${W}`} width={size} height={size} aria-hidden>
         <rect x={0.75} y={0.75} width={W - 1.5} height={W - 1.5} rx={2} fill="#FFFFFF" stroke="var(--fp-ink, #141414)" strokeWidth={1.5} />
         {ORDER.map((idx, k) => {

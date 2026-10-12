@@ -12,7 +12,7 @@
 import type { PlayMode, Tier, Variant } from '../types';
 import type { Rank, RankId, SolveRecord, XpLine } from './types';
 
-export const TIER_BASE: Record<Tier, number> = { easy: 20, medium: 35, hard: 60, extreme: 100, mastermind: 180 };
+export const TIER_BASE: Record<Tier, number> = { easy: 20, medium: 35, hard: 60, extreme: 100, mastermind: 180, ultra: 396 }; // ultra (Extra Extreme) = 2.2 × Mastermind
 export const STAR_MULT: Record<0 | 1 | 2 | 3, number> = { 0: 1, 1: 1, 2: 1.4, 3: 2 };
 export const VARIANT_MULT: Record<Variant, number> = {
   classic: 1,
@@ -32,7 +32,7 @@ export const ZEN_MULT = 0.25;
 export const RUN_CASE_MULT = 0.6;
 
 export const TIER_LABEL: Record<Tier, string> = {
-  easy: 'Rookie', medium: 'Detective', hard: 'Inspector', extreme: 'Chief', mastermind: 'Mastermind',
+  easy: 'Rookie', medium: 'Detective', hard: 'Inspector', extreme: 'Chief', mastermind: 'Mastermind', ultra: 'Extra Extreme',
 };
 export const VARIANT_LABEL: Record<Variant, string> = {
   classic: 'Classic', accomplice: 'Accomplice', lockedRoom: 'Locked room', poison: 'Poison', sniper: 'Sniper',
@@ -147,9 +147,9 @@ export function blitzRunXp(score: number): XpLine[] {
   return lines;
 }
 
-export const GAUNTLET_STAGES = 7;
+export const GAUNTLET_STAGES = 8;
 
-/** Run bonus at the end of a Gauntlet run (`stage` = stages cleared, 0–7). */
+/** Run bonus at the end of a Gauntlet run (`stage` = stages cleared, 0–8; the 8th is an Extra Extreme case). */
 export function gauntletRunXp(stage: number): XpLine[] {
   const s = Math.max(0, Math.min(GAUNTLET_STAGES, Math.floor(stage)));
   const lines: XpLine[] = [];

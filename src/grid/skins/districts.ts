@@ -5,7 +5,7 @@ import type { District } from './types';
  * room-carving layout, wall/sheet style, palette and ambience. ids are the engine seasonIds.
  * 30 cases per tier + 10 Mastermind = 130 cases per district, 1,430 total (11 districts; IX–XI are bright 'light'-mood districts).
  */
-const PER_TIER = { easy: 30, medium: 30, hard: 30, extreme: 30, mastermind: 10 } as const;
+const PER_TIER = { easy: 30, medium: 30, hard: 30, extreme: 30, mastermind: 10, ultra: 10 } as const;
 
 export const DISTRICTS: District[] = [
   {
@@ -163,4 +163,5 @@ export const TIER_INFO = {
   hard: { name: 'Inspector', floor: 'Second floor', blurb: 'Diagonals, sight lines, and one liar from case 16.', sizes: '7×7 – 9×9' },
   extreme: { name: 'Chief', floor: 'Third floor', blurb: 'Big plans. Liars. Double homicides from case 16.', sizes: '9×9 – 12×12' },
   mastermind: { name: 'Mastermind', floor: 'The roof', blurb: 'Two bodies, one liar, fourteen rooms. Good luck.', sizes: '12×12 – 14×14' },
+  ultra: { name: 'Extra Extreme', floor: 'The sealed attic', blurb: 'No rows. No columns. Only what they saw, who they stood with, and what they swore.', sizes: '8×8 – 12×12' },
 } as const;

@@ -7,6 +7,7 @@ const ALIASES: Record<string, Tier> = {
   hard: 'hard', inspector: 'hard', i: 'hard', h: 'hard',
   extreme: 'extreme', chief: 'extreme', c: 'extreme', x: 'extreme',
   mastermind: 'mastermind', mm: 'mastermind',
+  ultra: 'ultra', 'extra-extreme': 'ultra', extraextreme: 'ultra', xx: 'ultra', attic: 'ultra',
 };
 
 /** Route param → Tier. Accepts internal ids (`easy`…`mastermind`, used in links) and display names (`rookie`, `chief`…). */

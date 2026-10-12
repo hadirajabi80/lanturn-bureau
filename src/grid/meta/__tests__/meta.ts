@@ -8,7 +8,7 @@ import { ACHIEVEMENT_ICONS } from '../icons';
 import { addDays, dayDiff, isoWeekKey, lastNDays, localISODate } from '../dates';
 import { HISTORY_LIMIT, advanceStreak, applyBlitz, applyBurn, applyGauntlet, applySolve, computeStats, emptyProfile, liveStreak, normalizeProfile } from '../logic';
 import type { ProfileData, SolveRecord } from '../types';
-import { RANKS, VARIANT_MULT, computeSolveXp, rankForXp, rankProgress } from '../xp';
+import { RANKS, TIER_BASE, VARIANT_MULT, computeSolveXp, rankForXp, rankProgress } from '../xp';
 
 let failed = 0;
 let passed = 0;
@@ -46,6 +46,9 @@ section('XP math', () => {
   eq(computeSolveXp(rec({ tier: 'medium', stars: 2, variant: 'lockedRoom' })).total, 56, 'medium 2★ lockedRoom = 56');
   // mastermind 3★ liarDouble: 180*2*1.8 = 648; first solve +324 = 972
   eq(computeSolveXp(rec({ tier: 'mastermind', stars: 3, variant: 'liarDouble', firstSolve: true })).total, 972, 'mastermind 3★ liarDouble first = 972');
+  // Extra Extreme base = 2.2 × Mastermind (396): 3★ classic = 792; first solve +396 = 1188
+  eq(TIER_BASE.ultra, Math.round(TIER_BASE.mastermind * 2.2), 'ultra base = 2.2 × mastermind');
+  eq(computeSolveXp(rec({ tier: 'ultra', stars: 3, variant: 'classic', firstSolve: true })).total, 1188, 'ultra 3★ classic first = 1188');
   // daily first: easy 1★ = 20 + 10 first + 50 daily = 80
   eq(computeSolveXp(rec({ mode: 'daily', firstSolve: true })).total, 80, 'daily first-solve = 80');
   // daily replay: no daily/first bonus
@@ -57,7 +60,7 @@ section('XP math', () => {
   // blitz: 60% of easy 3★ (40 + under-par 0) = 24
   eq(computeSolveXp(rec({ mode: 'blitz', stars: 3 })).total, 24, 'blitz case ×0.6');
   // breakdown always sums to the total
-  for (const tier of ['easy', 'medium', 'hard', 'extreme', 'mastermind'] as const) {
+  for (const tier of ['easy', 'medium', 'hard', 'extreme', 'mastermind', 'ultra'] as const) {
     for (const variant of Object.keys(VARIANT_MULT) as (keyof typeof VARIANT_MULT)[]) {
       for (const stars of [0, 1, 2, 3] as const) {
         for (const mode of ['case', 'daily', 'zen', 'blitz', 'gauntlet'] as const) {
@@ -187,12 +190,27 @@ section('Achievements unlock exactly once', () => {
   m = applyBlitz(m.profile, 12);
   ok(!m.outcome.achievements.some((a) => a.id === 'blitz-10'), 'Blitz 10 once');
   eq(m.profile.blitzBest, 12, 'blitz best');
-  const g = applyGauntlet(emptyProfile(), 7);
-  ok(g.outcome.achievements.some((a) => a.id === 'gauntlet-survivor') && g.outcome.xpGained === 490 + 250, 'Gauntlet survivor + run XP');
+  const g7 = applyGauntlet(emptyProfile(), 7);
+  ok(!g7.outcome.achievements.some((a) => a.id === 'gauntlet-survivor'), 'Gauntlet: 7 of 8 floors is not survival');
+  const g = applyGauntlet(emptyProfile(), 8);
+  ok(g.outcome.achievements.some((a) => a.id === 'gauntlet-survivor') && g.outcome.xpGained === 640 + 250, 'Gauntlet survivor (8 floors) + run XP');
 
-  // District complete: 130 distinct catalogue cases, duplicates don't count
+  // Extra Extreme (the sealed attic)
+  let ua = applySolve(emptyProfile(), rec({ puzzleId: 'ashcombe-ultra-1', tier: 'ultra', size: 10, firstSolve: true }));
+  ok(ua.outcome.achievements.some((a) => a.id === 'attic-dweller'), 'Attic Dweller on the first Extra Extreme');
+  for (let i = 2; i <= 10; i++) ua = applySolve(ua.profile, rec({ puzzleId: `ashcombe-ultra-${i}`, tier: 'ultra', size: 10, firstSolve: true }));
+  ok(!!ua.profile.unlocked['sealed-shut'], 'Sealed Shut after all 10 in Ashcombe');
+  eq(ACHIEVEMENT_BY_ID['grand-attic'].progress(ua.profile), { value: 10, goal: 110 }, 'Grand Attic counts distinct catalogue cases');
+  ok(!ua.profile.unlocked['no-coordinates'], 'No Coordinates Needed not yet at 10');
+  let un = ua.profile;
+  for (let i = 1; i <= 10; i++) un = applySolve(un, rec({ puzzleId: `harrow-ultra-${i}`, district: 'harrow', tier: 'ultra', size: 9 })).profile;
+  ok(!!un.unlocked['no-coordinates'], 'No Coordinates Needed at 20');
+  eq(ACHIEVEMENT_BY_ID['grand-attic'].progress(applySolve(un, rec({ puzzleId: 'harrow-ultra-99', district: 'harrow', tier: 'ultra' })).profile).value, 20, 'out-of-range ids ignored');
+  for (const id of ['attic-dweller', 'sealed-shut', 'no-coordinates', 'grand-attic']) ok(!!ACHIEVEMENT_ICONS[ACHIEVEMENT_BY_ID[id]!.icon], `icon resolves for ${id}`);
+
+  // District complete: 140 distinct catalogue cases, duplicates don't count
   let dp = emptyProfile();
-  const tiers = [['easy', 30], ['medium', 30], ['hard', 30], ['extreme', 30], ['mastermind', 10]] as const;
+  const tiers = [['easy', 30], ['medium', 30], ['hard', 30], ['extreme', 30], ['mastermind', 10], ['ultra', 10]] as const;
   let unlockedCount = 0;
   for (const [tier, count] of tiers) {
     for (let i = 1; i <= count; i++) {
@@ -205,7 +223,7 @@ section('Achievements unlock exactly once', () => {
       }
     }
   }
-  eq(dp.counters.uniqueByDistrict.harrow, 130, '130 unique');
+  eq(dp.counters.uniqueByDistrict.harrow, 140, '140 unique');
   eq(unlockedCount, 1, 'District Complete exactly once');
   // District badges are derived from DISTRICTS (11 today incl. the light-mood IX–XI)
   const districtBadges = ACHIEVEMENTS.filter((a) => a.id.startsWith('district-'));

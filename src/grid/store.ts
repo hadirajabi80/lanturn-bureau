@@ -3,7 +3,8 @@
  * Brief: docs/FLOORPLAN-DESIGN.md §5 (desk, freedom & burning), §6 (stars), §7 (contracts).
  *
  * Persisted: `progress[puzzleId]` (solved, best stars/time, burns, attempts, the in-progress desk),
- * `settings`, `seenVariants` (scenario explainers already shown) and mode `records`.
+ * `settings`, `seenVariants` (scenario explainers already shown), `seenTiers` (tier explainers already shown,
+ * e.g. the Extra Extreme "No coordinates" card) and mode `records`.
  * Session only: the live desk (`active`), selection, tool, the pending Otto hint.
  *
  * USER RULE — the desk NEVER blocks a move. Pins may share rows/columns and sit on crossed squares;
@@ -172,6 +173,8 @@ export interface FloorplanState {
   progress: Record<string, CaseProgress>;
   settings: FloorplanSettings;
   seenVariants: Variant[];
+  /** tiers whose first-visit explainer was shown (today only 'ultra' has one) */
+  seenTiers: Tier[];
   records: ModeRecords;
   migratedV1: boolean;
 
@@ -213,10 +216,11 @@ export interface FloorplanState {
   accuse: (puzzle: Puzzle, accusation: Accusation) => AccuseResult;
   reopen: (puzzleId: string, puzzle?: Puzzle) => void;
   markVariantSeen: (v: Variant) => void;
+  markTierSeen: (t: Tier) => void;
   setSetting: <K extends keyof FloorplanSettings>(key: K, value: FloorplanSettings[K]) => void;
   /** end of a Blitz run (score = cases closed); also records it in the profile */
   recordBlitz: (score: number) => { newBest: boolean; outcome: RecordOutcome | null };
-  /** end of a Gauntlet run (stage = floors cleared 0–7) */
+  /** end of a Gauntlet run (stage = floors cleared 0–8) */
   recordGauntlet: (stage: number) => { newBest: boolean; outcome: RecordOutcome | null };
   recordZen: () => void;
 
@@ -267,6 +271,17 @@ export function personAt(placements: Record<string, Cell | null>, cell: Cell): s
 
 export function allPlaced(puzzle: Puzzle, placements: Record<string, Cell | null>): boolean {
   return puzzle.people.every((p) => !!placements[p.id]);
+}
+
+/**
+ * Par used for stars. The engine sets par per case; the sealed attic (Extra Extreme) is slow, careful work with no
+ * coordinates to anchor on, so its par never drops below 150 s per row (8×8 → 20 min, 12×12 → 30 min), well above
+ * a 12×12 Mastermind.
+ */
+export const PAR_FLOOR_PER_ROW: Partial<Record<Tier, number>> = { ultra: 150 };
+export function parSecondsFor(puzzle: Pick<Puzzle, 'tier' | 'rows' | 'parSeconds'>): number {
+  const floor = (PAR_FLOOR_PER_ROW[puzzle.tier] ?? 0) * puzzle.rows;
+  return Math.max(puzzle.parSeconds || 0, floor);
 }
 
 /** Stars (brief §6): 3 = no Reveal, ≤ 1 Ask Otto, under par · 2 = ≤ 1 Reveal, under 2× par · 1 = solved. */
@@ -401,7 +416,7 @@ function statusOf(p: CaseProgress | undefined): CaseStatus {
 }
 
 function countTier(progress: Record<string, CaseProgress>, districtId: string, tier: Tier): ProgressCount {
-  const total = getDistrict(districtId)?.casesPerTier[tier] ?? (tier === 'mastermind' ? 10 : 30);
+  const total = getDistrict(districtId)?.casesPerTier[tier] ?? (tier === 'mastermind' || tier === 'ultra' ? 10 : 30);
   const acc: ProgressCount = { solved: 0, total, stars: 0, inProgress: 0, burned: 0 };
   for (let i = 1; i <= total; i++) {
     const p = progress[puzzleIdOf(districtId, tier, i)];
@@ -481,6 +496,7 @@ export const useFloorplan = create<FloorplanState>()(
         progress: {},
         settings: { ...DEFAULT_SETTINGS },
         seenVariants: [],
+        seenTiers: [],
         records: { ...DEFAULT_RECORDS },
         migratedV1: false,
 
@@ -815,7 +831,7 @@ export const useFloorplan = create<FloorplanState>()(
             return { ...miss, burned: true };
           }
           const timeMs = a.elapsedMs;
-          const stars = starsFor(timeMs, a.otto, a.reveals, puzzle.parSeconds);
+          const stars = starsFor(timeMs, a.otto, a.reveals, parSecondsFor(puzzle));
           const prev = progress[activeId];
           const newBest = record && (prev?.bestTimeMs === undefined || timeMs < prev.bestTimeMs);
           const bestTimeMs = newBest ? timeMs : prev?.bestTimeMs;
@@ -846,7 +862,7 @@ export const useFloorplan = create<FloorplanState>()(
               mode,
               size: puzzle.rows,
               timeMs,
-              parSeconds: puzzle.parSeconds,
+              parSeconds: parSecondsFor(puzzle),
               stars: mode === 'zen' ? 0 : stars,
               otto: a.otto,
               reveals: a.reveals,
@@ -875,6 +891,8 @@ export const useFloorplan = create<FloorplanState>()(
 
         markVariantSeen: (v) =>
           set((s) => (s.seenVariants.includes(v) ? {} : { seenVariants: [...s.seenVariants, v] })),
+
+        markTierSeen: (t) => set((s) => (s.seenTiers.includes(t) ? {} : { seenTiers: [...s.seenTiers, t] })),
 
         setSetting: (key, value) => {
           if (key === 'sound') setDeskSound(Boolean(value));
@@ -924,6 +942,7 @@ export const useFloorplan = create<FloorplanState>()(
         ),
         settings: s.settings,
         seenVariants: s.seenVariants,
+        seenTiers: s.seenTiers,
         records: s.records,
         migratedV1: s.migratedV1,
       }),
@@ -935,6 +954,7 @@ export const useFloorplan = create<FloorplanState>()(
           settings: { ...DEFAULT_SETTINGS, ...(p.settings ?? {}) },
           records: { ...DEFAULT_RECORDS, ...(p.records ?? {}) },
           seenVariants: p.seenVariants ?? [],
+          seenTiers: Array.isArray(p.seenTiers) ? p.seenTiers : [],
           progress: p.progress ?? {},
         };
       },

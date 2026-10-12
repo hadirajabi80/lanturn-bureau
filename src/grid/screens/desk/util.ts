@@ -34,6 +34,7 @@ export const TIER_NAME: Record<Tier, string> = {
   hard: 'Inspector',
   extreme: 'Chief',
   mastermind: 'Mastermind',
+  ultra: 'Extra Extreme',
 };
 
 export interface VariantMeta {

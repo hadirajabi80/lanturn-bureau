@@ -31,6 +31,11 @@ const PHRASES: Array<{ say: string; means: string }> = [
   { say: 'north of Ann', means: 'in any row above Ann. “Directly north” means above her in the same column.' },
   { say: 'three steps from Ann', means: 'count squares up, down, left and right, never diagonally.' },
   { say: 'could see Ann', means: 'same row, column or diagonal, with no blocking furniture in between. People never block the view.' },
+  { say: 'nobody could see her', means: 'no one has a clear sight line to her. “Exactly two people could see her” counts those sight lines.' },
+  { say: 'closer to the piano than Ann', means: 'fewer steps (up, down, left, right) to the nearest piano than Ann needs.' },
+  { say: 'her room touched the Ballroom', means: 'her room and the Ballroom share a wall somewhere.' },
+  { say: 'if she was in the Library, she was sitting down', means: 'only broken when she was in the Library and standing. If she was not in the Library, the statement is true.' },
+  { say: 'either beside the piano or with Felix, not both', means: 'exactly one of the two is true.' },
   { say: 'alone in the room', means: 'nobody else is in that room.' },
 ];
 
@@ -180,6 +185,10 @@ export default function GuideScreen() {
                   ))}
                 </tbody>
               </table>
+              <p id="extra-extreme" className="scroll-mt-20">
+                <b>Extra Extreme</b> (the sealed attic, above the roof) never mentions rows, columns, corners or edges. No coordinates: read the
+                room. Every statement is about who could see whom, who stood beside or closer to what, and which rooms touched.
+              </p>
             </Section>
 
             <Section

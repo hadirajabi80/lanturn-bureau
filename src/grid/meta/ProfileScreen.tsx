@@ -44,7 +44,7 @@ export function ProfileScreen({ backTo = '/plans' }: ProfileScreenProps) {
             <SummaryTable state={state} stats={stats} />
           </Section>
           <Section i={3} className="lg:col-span-5" n={2} title="Floors" kicker="Solves by tier">
-            <BarRows rows={stats.byTier.map((t) => ({ key: t.tier, label: TIER_LABEL[t.tier], value: t.count }))} />
+            <BarRows rows={stats.byTier.map((t) => ({ key: t.tier, label: TIER_LABEL[t.tier], value: t.count, swatch: t.tier === 'ultra' ? '#B3122E' : undefined }))} />
           </Section>
           <Section i={4} className="lg:col-span-7 lg:row-span-2" n={3} title="Districts" kicker="Solves by building">
             <BarRows

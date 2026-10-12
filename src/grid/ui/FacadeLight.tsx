@@ -123,7 +123,7 @@ export function cottage(f: number, n: number, k: Ctx): Spec {
       )}
     </>
   );
-  return { W, H, G, back, front, windows };
+  return { W, H, G, back, front, windows, attic: { x: 50, y: 42, w: 172, h: 32 } };
 }
 
 // ───────────────────────────── boutique ─────────────────────────────
@@ -218,7 +218,7 @@ export function boutique(f: number, n: number, k: Ctx): Spec {
       {sparkle(204, 112, 3, '#ffffff', 0.7, 's5')}
     </>
   );
-  return { W, H, G, back, front, windows };
+  return { W, H, G, back, front, windows, attic: { x: 42, y: 32, w: 176, h: 34 } };
 }
 
 // ───────────────────────────── carnival ─────────────────────────────
@@ -335,5 +335,5 @@ export function carnival(f: number, n: number, k: Ctx): Spec {
       ))}
     </>
   );
-  return { W, H, G, back, front, windows };
+  return { W, H, G, back, front, windows, attic: { x: 68, y: 24, w: 64, h: 32 } };
 }

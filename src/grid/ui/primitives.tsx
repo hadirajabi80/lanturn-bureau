@@ -4,6 +4,7 @@ import { Heart, MapPin, Star } from 'lucide-react';
 import { useSkin } from './skin';
 import type { Variant } from '@/grid/types';
 import { VariantGlyph, VARIANT_INFO } from './VariantGlyph';
+import { SkullKeyGlyph } from './AtticArt';
 
 const cx = (...c: Array<string | false | null | undefined>) => c.filter(Boolean).join(' ');
 
@@ -201,12 +202,15 @@ export interface KeyTagProps {
   onClick?: () => void;
   className?: string;
   style?: CSSProperties;
+  /** Extra Extreme (sealed attic) card: dark crimson-on-black style with a skull-key seal. */
+  sealed?: boolean;
 }
 
 /** Case index card: number, size badge, variant glyph, stars / in-progress pin / scorch. */
-export function KeyTag({ number, status, stars = 0, burns = 0, size, variant, title, to, onClick, className, style }: KeyTagProps) {
+export function KeyTag({ number, status, stars = 0, burns = 0, size, variant, title, to, onClick, className, style, sealed }: KeyTagProps) {
   const label = [
     `Case ${number}`,
+    sealed ? 'Extra Extreme' : null,
     title,
     size ? `${size} by ${size}` : null,
     variant ? VARIANT_INFO[variant].name : null,
@@ -235,7 +239,9 @@ export function KeyTag({ number, status, stars = 0, burns = 0, size, variant, ti
         {status === 'solved' ? (
           <StarRow stars={stars} size={11} />
         ) : status === 'progress' ? (
-          <MapPin className="size-3.5 fill-(--fp-danger) text-(--fp-ink)" aria-hidden strokeWidth={2} />
+          <MapPin className={cx('size-3.5 fill-(--fp-danger)', sealed ? 'text-(--fp-hl)' : 'text-(--fp-ink)')} aria-hidden strokeWidth={2} />
+        ) : sealed ? (
+          <SkullKeyGlyph size={13} className="fp-keytag__seal" />
         ) : null}
       </span>
       {title && (
@@ -249,7 +255,7 @@ export function KeyTag({ number, status, stars = 0, burns = 0, size, variant, ti
       )}
     </>
   );
-  const cls = cx('fp-keytag group w-full outline-none', className);
+  const cls = cx('fp-keytag group w-full outline-none', sealed && 'fp-keytag--sealed', className);
   if (to) {
     return (
       <Link to={to} className={cls} data-status={status} aria-label={label} onClick={onClick} style={style}>

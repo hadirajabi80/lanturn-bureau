@@ -28,6 +28,7 @@ export { FacadeArt, FACADE_SIZE, facadeWindowCount, type FacadeArtProps } from '
 export { VariantGlyph, VARIANT_INFO, type VariantGlyphProps } from './VariantGlyph';
 export { PageShell, type PageShellProps } from './PageShell';
 export { LanternLoader } from './LanternLoader';
+export { SkullKeyGlyph, AtticChain, type SkullKeyGlyphProps, type AtticChainProps } from './AtticArt';
 export { useFpReduced } from './useFpReduced';
 export { parseTierParam, tierLabel } from './tiers';
 export { Stamp, type StampProps } from '@/components/fx/Stamp';

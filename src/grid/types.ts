@@ -7,8 +7,10 @@
 import type { AvatarSpec } from '../data/types';
 
 /** Internal ids stay easy…extreme; display names are Rookie / Detective / Inspector / Chief / Mastermind (see TIER_INFO in docs). */
-export type Tier = 'easy' | 'medium' | 'hard' | 'extreme' | 'mastermind';
-export const TIERS: Tier[] = ['easy', 'medium', 'hard', 'extreme', 'mastermind'];
+export type Tier = 'easy' | 'medium' | 'hard' | 'extreme' | 'mastermind' | 'ultra';
+/** 'ultra' is displayed as "Extra Extreme" — the hardest tier: no coordinate clues at all, only relational / narrative
+ *  clues, and every case needs real chains of reasoning (see docs/EXTRA-EXTREME.md). */
+export const TIERS: Tier[] = ['easy', 'medium', 'hard', 'extreme', 'mastermind', 'ultra'];
 
 export interface Cell { r: number; c: number }
 export const cellKey = (c: Cell) => `${c.r},${c.c}`;
@@ -122,7 +124,26 @@ export type Predicate =
   | { type: 'lineOfSight'; personId: string; value: boolean }   // same row/col/diagonal, no blocking (non-occupiable) furniture between
   | { type: 'between'; a: string; b: string }                   // strictly between two people in the same row or column
   | { type: 'or'; a: Predicate; b: Predicate }
-  | { type: 'not'; p: Predicate };
+  | { type: 'not'; p: Predicate }
+  // ── Extra Extreme (tier 'ultra') — relational / narrative predicates. Semantics: engine/predicates.ts + docs/GRID-PLAN.md §1.
+  //    "see" = clear sight line along a row, column or diagonal, blocked only by blocking furniture strictly between
+  //    (people never block). Between two people sight is always diagonal (nobody shares a row or column).
+  | { type: 'seeCount'; cmp: Cmp; n: number }                  // N other people had a clear sight line to the owner
+  | { type: 'seenByNobody' }                                    // nobody had a clear sight line to the owner
+  | { type: 'crowdedThan'; personId: string }                   // own room holds MORE people than that person's room
+  | { type: 'onlyOnFurnitureInRoom' }                           // owner is on furniture; nobody else in the room is
+  | { type: 'noDiagonalNeighbour' }                             // no person diagonally adjacent to the owner
+  | { type: 'closerToKindThan'; kind: FurnitureKind; personId: string } // steps to the nearest piece of kind < that person's
+  | { type: 'closestToKind'; kind: FurnitureKind }              // the unique person closest (steps) to a piece of kind
+  | { type: 'roomAllOccupiable' }                               // own room has ≥ 1 piece and every piece is occupiable
+  | { type: 'roomHasButNot'; has: FurnitureKind; not: FurnitureKind } // own room has a `has` and no `not`
+  | { type: 'largestRoomWith'; kind: FurnitureKind }            // in the unique largest room containing that kind
+  | { type: 'roomTouches'; roomId: string }                     // own room (≠ roomId) shares a wall with that room
+  | { type: 'canSeeKind'; kind: FurnitureKind }                 // clear sight line to some cell of a piece of that kind
+  | { type: 'cannotSeeKind'; kind: FurnitureKind }              //   (the piece the owner stands on does not count)
+  | { type: 'ifThen'; a: Predicate; b: Predicate }              // if a then b (true when a is false)
+  | { type: 'xor'; a: Predicate; b: Predicate }                 // exactly one of a, b
+  | { type: 'and'; a: Predicate; b: Predicate };                // both (one sentence carrying two facts)
 
 export interface Clue {
   personId: string;
@@ -208,6 +229,7 @@ export const VARIANTS_BY_TIER: Record<Tier, Variant[]> = {
   hard: ['classic', 'accomplice', 'sniper', 'lockedRoom', 'poison', 'liar'],
   extreme: ['accomplice', 'liar', 'double', 'sniper', 'poison'],
   mastermind: ['liarDouble', 'accompliceLiar', 'double', 'liar'],
+  ultra: ['classic', 'accomplice', 'lockedRoom', 'sniper', 'liar', 'double'],
 };
 
 /** How the generator carves rooms for a building. */

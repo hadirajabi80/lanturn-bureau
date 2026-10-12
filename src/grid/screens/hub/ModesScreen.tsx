@@ -106,8 +106,8 @@ const MODES: Mode[] = [
     facts: ['Timed', 'Classic only', 'Best score kept'], art: BlitzArt,
   },
   {
-    id: 'gauntlet', to: '/plans/gauntlet', name: 'Gauntlet', plate: '7 floors', district: 'express',
-    line: 'Seven cases of rising difficulty and new scenarios. One burned file ends the run. No Otto.',
+    id: 'gauntlet', to: '/plans/gauntlet', name: 'Gauntlet', plate: '8 floors', district: 'express',
+    line: 'Eight cases of rising difficulty, up to the sealed attic. One burned file ends the run. No Otto.',
     facts: ['No hints', 'One life', 'Best floor kept'], art: GauntletArt,
   },
   {

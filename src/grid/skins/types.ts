@@ -72,5 +72,5 @@ export interface District {
   ambience: 'clock' | 'waves' | 'jazz' | 'hush' | 'rain' | 'bells' | 'rails' | 'wind' | 'musicbox' | 'harp' | 'calliope';
   icon: string;             // lucide icon name
   /** cases per tier for this district (mastermind has fewer). */
-  casesPerTier: Record<'easy' | 'medium' | 'hard' | 'extreme' | 'mastermind', number>;
+  casesPerTier: Record<'easy' | 'medium' | 'hard' | 'extreme' | 'mastermind' | 'ultra', number>;
 }

@@ -7,7 +7,7 @@ import { VARIANTS_BY_TIER, type PlayMode, type Tier } from '../types';
 import { applyBlitz, applyBurn, applyGauntlet, applySolve, emptyProfile } from './logic';
 import type { ProfileData } from './types';
 
-const SIZE: Record<Tier, [number, number]> = { easy: [4, 5], medium: [5, 7], hard: [7, 9], extreme: [9, 12], mastermind: [12, 14] };
+const SIZE: Record<Tier, [number, number]> = { easy: [4, 5], medium: [5, 7], hard: [7, 9], extreme: [9, 12], mastermind: [12, 14], ultra: [8, 12] };
 
 export function makeDemoProfile(opts: { solves?: number; days?: number; seed?: number; now?: number } = {}): ProfileData {
   const { solves = 260, days = 75, now = Date.now() } = opts;
@@ -17,7 +17,7 @@ export function makeDemoProfile(opts: { solves?: number; days?: number; seed?: n
   const start = now - days * 86_400_000;
   let p = emptyProfile(start);
   const counters: Record<string, number> = {};
-  const tiers: Tier[] = ['easy', 'easy', 'medium', 'medium', 'hard', 'hard', 'extreme', 'mastermind'];
+  const tiers: Tier[] = ['easy', 'easy', 'medium', 'medium', 'hard', 'hard', 'extreme', 'mastermind', 'ultra'];
   for (let i = 0; i < solves; i++) {
     // spread over the window, skipping some days, last week dense (streak)
     const frac = i / solves;

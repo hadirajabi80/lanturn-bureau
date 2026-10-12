@@ -14,6 +14,8 @@ import {
   SkinProvider,
   VARIANT_INFO,
   VariantGlyph,
+  SkullKeyGlyph,
+  AtticChain,
   parseTierParam,
   useFpReduced,
 } from '@/grid/ui';
@@ -47,6 +49,7 @@ export default function CaseRack() {
   if (!tier) return <Navigate to={`/plans/d/${d.id}`} replace />;
 
   const info = TIER_INFO[tier];
+  const sealed = tier === 'ultra';
   const t = tierTally(progress, d.id, tier);
   const presentVariants = VARIANTS_BY_TIER[tier].filter((v) => cases.some((c) => c.variant === v));
 
@@ -77,7 +80,17 @@ export default function CaseRack() {
               <span aria-hidden>·</span>
               <span>{info.floor}</span>
             </div>
-            <h2 className="fp-display mt-2 text-(--fp-ink)">{info.name} files</h2>
+            <h2 className="fp-display mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-(--fp-ink)">
+              {sealed && <SkullKeyGlyph size={34} className="shrink-0 text-(--attic-red)" />}
+              {info.name} files
+            </h2>
+            {sealed && (
+              <div className="fp-attic mt-3 flex items-center gap-3 rounded-md px-3 py-2 shadow-[inset_0_0_0_2px_var(--fp-ink)]">
+                <span className="fp-attic-plate">No coordinates</span>
+                <span className="min-w-0 flex-1 text-[14px] font-semibold">Read the room. Every clue is about people, furniture and rooms, never rows or columns.</span>
+                <AtticChain width={64} className="hidden shrink-0 text-(--attic-muted) sm:block" />
+              </div>
+            )}
             <p className="mt-2 text-[15px] text-(--fp-muted)">
               {info.blurb} <span className="whitespace-nowrap">Grids <span className="font-mono text-(--fp-ink)">{info.sizes}</span>.</span>
             </p>
@@ -147,6 +160,7 @@ export default function CaseRack() {
                         stars={p?.stars ?? 0}
                         burns={isScorched(p) ? Math.max(1, p?.burns ?? 1) : 0}
                         to={`/plans/d/${d.id}/${tier}/${c.n}`}
+                        sealed={sealed}
                         className="max-w-[112px]"
                       />
                     </motion.li>

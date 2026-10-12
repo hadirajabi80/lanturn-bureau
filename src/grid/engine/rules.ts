@@ -72,6 +72,13 @@ export function negatePred(p: Predicate): Predicate {
       if (p.cmp === 'atMost') return { type: 'distance', personId: p.personId, cmp: 'atLeast', n: p.n + 1 };
       return { type: 'not', p };
     case 'not': return p.p;
+    case 'seenByNobody': return { type: 'seeCount', cmp: 'atLeast', n: 1 };
+    case 'seeCount':
+      if (p.cmp === 'atLeast') return p.n <= 1 ? { type: 'seenByNobody' } : { type: 'seeCount', cmp: 'atMost', n: p.n - 1 };
+      if (p.cmp === 'atMost') return { type: 'seeCount', cmp: 'atLeast', n: p.n + 1 };
+      return { type: 'not', p };
+    case 'canSeeKind': return { type: 'cannotSeeKind', kind: p.kind };
+    case 'cannotSeeKind': return { type: 'canSeeKind', kind: p.kind };
     default: return { type: 'not', p };
   }
 }
