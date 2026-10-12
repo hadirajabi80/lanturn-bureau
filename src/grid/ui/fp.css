@@ -179,6 +179,8 @@ button.fp-chip:hover { background: color-mix(in srgb, var(--fp-hl) 45%, white); 
 .fp-keytag[data-status='solved'] { background: #e3f1e7; }
 .fp-keytag:hover,
 .fp-keytag:focus-visible {
+  /* lift above the next row so the case-name label is never covered */
+  z-index: 30;
   transform: translate(-1px, -1px);
   box-shadow: inset 0 0 0 2px var(--fp-ink), 4px 4px 0 var(--fp-ink);
 }

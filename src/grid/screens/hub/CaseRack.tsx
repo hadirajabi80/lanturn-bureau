@@ -136,7 +136,7 @@ export default function CaseRack() {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.95 }}
                       transition={{ delay: reduced ? 0 : Math.min(i, 24) * 0.012, type: 'spring', stiffness: 520, damping: 32 }}
-                      className="relative flex flex-col items-center"
+                      className="relative flex flex-col items-center hover:z-30 focus-within:z-30"
                     >
                       <KeyTag
                         number={c.n}
