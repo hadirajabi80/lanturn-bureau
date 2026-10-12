@@ -9,7 +9,7 @@ import type { KindDef } from './types';
 
 export type { Draw, KindDef } from './types';
 
-/** Every FurnitureKind -> its plan drawing. `stretch` pieces span their whole footprint. */
+/** Every FurnitureKind -> its three-quarter view drawing. `stretch` pieces span their whole footprint. */
 export const KINDS: Record<FurnitureKind, KindDef> = {
   chair: { draw: Chair, stretch: false },
   armchair: { draw: Armchair, stretch: false },

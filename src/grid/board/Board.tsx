@@ -16,8 +16,9 @@ import {
   type PointerEvent,
   type RefObject,
 } from 'react';
-import { FURNITURE_LABEL, OCCUPIABLE, cellKey, type Cell, type CellMarks, type Furniture, type Person, type Puzzle } from '../types';
+import { cellKey, type Cell, type CellMarks, type Furniture, type FurnitureKind, type Person, type Puzzle } from '../types';
 import { Burn } from './Burn';
+import { FurnitureCaptions, FurnitureTag, furnitureName, furnitureRule, pieceBox, tagColors, type PieceBox } from './FurnitureTag';
 import { LineAssist } from './LineAssist';
 import { CrossMark, PencilNotes } from './Marks';
 import { PersonToken } from './PersonToken';
@@ -61,6 +62,14 @@ export interface BoardProps {
   onCellLongPress?: (cell: Cell) => void;
   /** Shown in title blocks ("ASH-H-12"). */
   caseCode?: string;
+  /** Tapping a furniture square pops a name tag above the piece (default true). */
+  furnitureTags?: boolean;
+  /** Tiny persistent name captions under every piece (skipped on cells < 30 px). */
+  furnitureLabels?: boolean;
+  /** Soft glow outline around every piece of this kind (clue ↔ board linking). */
+  highlightFurniture?: FurnitureKind | null;
+  /** Soft wash over this room (clue ↔ board linking). */
+  highlightRoomId?: string | null;
   /** Max board width in CSS px (default 640). */
   maxWidth?: number;
   className?: string;
@@ -73,6 +82,11 @@ const MIN_CELL_PX = 26;
 /** Boards of 9×9 and up also get zoom while cells are smaller than this. */
 const COMFORT_CELL_PX = 44;
 const LONG_PRESS_MS = 450;
+/** Tap name tag lifetime; hover tooltip delay. */
+const TAG_MS = 1800;
+const HOVER_MS = 250;
+/** Persistent captions need at least this on-screen cell size (zoom in on dense boards). */
+const CAPTION_MIN_CELL_PX = 30;
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
 
@@ -276,6 +290,61 @@ export function Board(props: BoardProps): JSX.Element {
   const crosses = props.marks?.crosses ?? {};
   const crossFor = props.crossesVisibleFor ?? selectedPersonId ?? 'all';
 
+  // ── furniture names: tap tag, hover tooltip, captions, clue highlights ──
+  const tagsOn = props.furnitureTags ?? true;
+  const tagCols = useMemo(() => tagColors(district.palette, district.mood), [district]);
+  const boxOf = useCallback((f: Furniture): PieceBox => pieceBox(f, U, m, VBW, VBH), [m, VBW, VBH]);
+  const [tag, setTag] = useState<{ piece: Furniture; nonce: number } | null>(null);
+  const [hoverPiece, setHoverPiece] = useState<Furniture | null>(null);
+  const tagTimer = useRef(0);
+  const hoverTimer = useRef(0);
+  useEffect(
+    () => () => {
+      window.clearTimeout(tagTimer.current);
+      window.clearTimeout(hoverTimer.current);
+    },
+    [],
+  );
+  useEffect(() => {
+    window.clearTimeout(tagTimer.current);
+    window.clearTimeout(hoverTimer.current);
+    setTag(null);
+    setHoverPiece(null);
+  }, [puzzle.id]);
+  /** A tap on a square: furniture (not under a pinned person) pops its name tag; anything else hides it. */
+  const noteTap = (cell: Cell) => {
+    if (!tagsOn) return;
+    window.clearTimeout(tagTimer.current);
+    window.clearTimeout(hoverTimer.current);
+    setHoverPiece(null);
+    const k = cellKey(cell);
+    const f = furnitureAt.get(k);
+    if (!f || occupant.has(k)) {
+      setTag(null);
+      return;
+    }
+    setTag((t) => ({ piece: f, nonce: (t?.nonce ?? 0) + 1 }));
+    tagTimer.current = window.setTimeout(() => setTag(null), TAG_MS);
+  };
+  const hoverOn = tagsOn && finePointer;
+  const onHitEnter = (e: PointerEvent<SVGRectElement>, cell: Cell) => {
+    if (!hoverOn || e.pointerType !== 'mouse') return;
+    const f = furnitureAt.get(cellKey(cell)) ?? null;
+    if (f && hoverPiece?.id === f.id) return;
+    window.clearTimeout(hoverTimer.current);
+    setHoverPiece(null);
+    if (f) hoverTimer.current = window.setTimeout(() => setHoverPiece(f), HOVER_MS);
+  };
+  const onHitsLeave = () => {
+    window.clearTimeout(hoverTimer.current);
+    setHoverPiece(null);
+  };
+  const shownHover = !tag ? hoverPiece : null;
+  const captionsOn = !!props.furnitureLabels && cellPx >= CAPTION_MIN_CELL_PX;
+  const hlKind = props.highlightFurniture ?? null;
+  const hlPieces = useMemo(() => (hlKind ? puzzle.furniture.filter((f) => f.kind === hlKind) : []), [hlKind, puzzle.furniture]);
+  const hlRoomIdx = props.highlightRoomId ? rooms.findIndex((r) => r.id === props.highlightRoomId) : -1;
+
   const cells = useMemo(() => {
     const out: Cell[] = [];
     for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) out.push({ r, c });
@@ -324,6 +393,7 @@ export function Board(props: BoardProps): JSX.Element {
       case 'Enter':
       case ' ':
         e.preventDefault();
+        noteTap(cell);
         if ((e.shiftKey || e.altKey) && onCellLongPress) onCellLongPress(cell);
         else onCellTap(cell);
         break;
@@ -386,6 +456,7 @@ export function Board(props: BoardProps): JSX.Element {
     press.current = null;
     if (p?.fired) return;
     if (p) window.clearTimeout(p.timer);
+    noteTap(cell);
     if (e.altKey && onCellLongPress) onCellLongPress(cell);
     else onCellTap(cell);
   };
@@ -418,7 +489,7 @@ export function Board(props: BoardProps): JSX.Element {
     const crossed = (crosses[k] ?? []).map((id) => (id === '*' ? 'everyone' : peopleById.get(id)?.name)).filter(Boolean);
     const parts = [`row ${cell.r + 1}, column ${cell.c + 1}`];
     if (room) parts.push(room.name);
-    if (f) parts.push(FURNITURE_LABEL[f.kind].a.replace(/^(a|an|some) /, '') + (OCCUPIABLE[f.kind] ? '' : ' (blocked)'));
+    if (f) parts.push(`${furnitureName(f.kind).toLowerCase()} (${furnitureRule(f.kind)})`);
     if (who) parts.push(`${who.name}${who.isVictim ? ' (victim)' : ''} pinned here`);
     if (noted.length) parts.push(`pencilled: ${noted.join(', ')}`);
     if (crossed.length) parts.push(`crossed out for ${crossed.join(', ')}`);
@@ -463,6 +534,29 @@ export function Board(props: BoardProps): JSX.Element {
             </defs>
 
             {rowColAssist && <LineAssist idPrefix={uid} rows={rows} cols={cols} unit={U} placed={placedCells} clipId={`${uid}-gclip`} />}
+
+            {/* clue ↔ board linking: a soft wash over the hovered room */}
+            <g pointerEvents="none">
+              <AnimatePresence>
+                {hlRoomIdx >= 0 && ctx.geo.roomPaths[hlRoomIdx] && (
+                  <motion.path
+                    key={`room-${rooms[hlRoomIdx]?.id ?? hlRoomIdx}`}
+                    d={ctx.geo.roomPaths[hlRoomIdx]}
+                    clipPath={`url(#${uid}-gclip)`}
+                    fill={tokens.hover}
+                    fillOpacity={0.16}
+                    stroke={tokens.hover}
+                    strokeOpacity={0.9}
+                    strokeWidth={ctx.px(3)}
+                    strokeLinejoin="round"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: reduceMotion ? 0 : 0.2 }}
+                  />
+                )}
+              </AnimatePresence>
+            </g>
 
             {/* Otto / hint highlight */}
             <g pointerEvents="none">
@@ -559,6 +653,32 @@ export function Board(props: BoardProps): JSX.Element {
               })}
             </AnimatePresence>
 
+            {/* clue ↔ board linking: soft glow around every piece of the hovered kind (over people, so it shows under a pin) */}
+            <g pointerEvents="none">
+              <AnimatePresence>
+                {hlPieces.map((f) => {
+                  const rs = f.cells.map((c) => c.r);
+                  const cs = f.cells.map((c) => c.c);
+                  const x = Math.min(...cs) * U + 5;
+                  const y = Math.min(...rs) * U + 5;
+                  const w = (Math.max(...cs) - Math.min(...cs) + 1) * U - 10;
+                  const h = (Math.max(...rs) - Math.min(...rs) + 1) * U - 10;
+                  return (
+                    <motion.g
+                      key={`hl-${f.id}`}
+                      initial={{ opacity: 0 }}
+                      animate={reduceMotion ? { opacity: 1 } : { opacity: [0.7, 1, 0.7] }}
+                      exit={{ opacity: 0, transition: { duration: reduceMotion ? 0 : 0.15 } }}
+                      transition={reduceMotion ? { duration: 0 } : { duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+                    >
+                      <rect x={x} y={y} width={w} height={h} rx={14} fill="none" stroke={tokens.hover} strokeWidth={ctx.px(8)} strokeOpacity={0.7} filter={`url(#${uid}-selglow)`} />
+                      <rect x={x} y={y} width={w} height={h} rx={14} fill={tokens.hover} fillOpacity={0.14} stroke={tokens.hover} strokeWidth={ctx.px(3)} />
+                    </motion.g>
+                  );
+                })}
+              </AnimatePresence>
+            </g>
+
             <Strings lines={strings} color={tokens.string} reduceMotion={reduceMotion} shadow={tokens.shadow} />
 
             {/* keyboard focus ring */}
@@ -577,7 +697,7 @@ export function Board(props: BoardProps): JSX.Element {
             )}
 
             {/* hit targets */}
-            <g>
+            <g onPointerLeave={hoverOn ? onHitsLeave : undefined}>
               {cells.map((c, i) => (
                 <rect
                   key={cellKey(c)}
@@ -593,6 +713,7 @@ export function Board(props: BoardProps): JSX.Element {
                   tabIndex={i === rove ? 0 : -1}
                   aria-label={ariaFor(c)}
                   onPointerDown={(e) => onHitDown(e, c)}
+                  onPointerEnter={hoverOn ? (e) => onHitEnter(e, c) : undefined}
                   onPointerMove={onCellLongPress ? onHitMove : undefined}
                   onPointerUp={onCellLongPress ? cancelPress : undefined}
                   onPointerCancel={onCellLongPress ? cancelPress : undefined}
@@ -634,6 +755,44 @@ export function Board(props: BoardProps): JSX.Element {
                 background: `radial-gradient(circle at center, ${hexA(tokens.lamp.color, tokens.lamp.strength)} 0%, ${hexA(tokens.lamp.color, tokens.lamp.strength * 0.45)} 22%, ${hexA(tokens.lamp.color, 0)} 58%)`,
               }}
             />
+          )}
+
+          {captionsOn && (
+            <FurnitureCaptions
+              pieces={puzzle.furniture.filter((f) => !f.cells.some((c) => occupant.has(cellKey(c))))}
+              boxOf={boxOf}
+              colors={tagCols}
+              cellPx={cellPx}
+            />
+          )}
+
+          {/* hover tooltip (desktop) — decorative, the cell aria-label already names the piece */}
+          {hoverOn && (
+            <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 4 }}>
+              <FurnitureTag
+                piece={shownHover}
+                box={shownHover ? boxOf(shownHover) : null}
+                colors={tagCols}
+                variant="hover"
+                reduceMotion={reduceMotion}
+                layoutKey={ppu}
+              />
+            </div>
+          )}
+
+          {/* tap name tag */}
+          {tagsOn && (
+            <div role="status" aria-live="polite" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 5 }}>
+              <FurnitureTag
+                piece={tag?.piece ?? null}
+                nonce={tag?.nonce}
+                box={tag ? boxOf(tag.piece) : null}
+                colors={tagCols}
+                variant="tag"
+                reduceMotion={reduceMotion}
+                layoutKey={ppu}
+              />
+            </div>
           )}
 
           {props.burn && <Burn vb={{ x: -m.l, y: -m.t, w: VBW, h: VBH }} uid={uid} animate={burnAnimate && !reduceMotion} />}

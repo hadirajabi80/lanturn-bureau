@@ -3,14 +3,14 @@ import { mix } from '../../../../components/avatar/color';
 import type { SkinPalette, WallStyle } from '../../../skins/types';
 import type { Hatch, Material, StyleDef } from '../styles/types';
 import {
-  circ, hatchSegs, inset, inside, perimeter, resampleClosed, rot90, rotPt, roughD, rng, sample, scallopD, shapeBox, toD, translate,
+  circ, ell, hatchSegs, inset, inside, perimeter, resampleClosed, roughD, rng, sample, scallopD, shapeBox, toD, translate,
   type Pt, type Shape,
 } from './geom';
 
 export interface BodyOpts {
-  /** occupiable part: lighter, airier, never casts a shadow. */
+  /** occupiable part: lighter, airier. */
   open?: boolean;
-  /** principal body of the piece: casts the shadow, gets texture, rule, gloss and glow. */
+  /** principal body of the piece: gets texture, rule, gloss, glow and style overlays (rivets, pearls...). */
   main?: boolean;
   /** force texture on/off (default: main). */
   tex?: boolean;
@@ -20,8 +20,10 @@ export interface BodyOpts {
   alpha?: number;
   /** override fill colour (book spines, paint dabs) - use pen.tint(i). */
   fill?: string;
-  /** force the cast shadow on/off (default: main && !open). */
+  /** also cast an offset drop shadow of this shape (default off - pieces use pen.ground()). */
   cast?: boolean;
+  /** outline width multiplier (small parts look better a little finer). */
+  sw?: number;
   /** force the glow rim on/off (default: main). */
   glow?: boolean;
 }
@@ -37,16 +39,16 @@ export interface LineOpts {
 const r1 = (n: number) => Math.round(n * 10) / 10;
 
 /**
- * The Pen draws shapes in one style. Kinds describe a piece in a horizontal L x 100 frame;
- * for vertical 2-cell footprints the Pen rotates every shape by 90 deg (exactly, without
- * an SVG transform) so hatching angles, shadows and wobble stay consistent on the board.
+ * The Pen draws shapes in one style. Kinds describe a piece in its w x h frame (100 units per
+ * cell) in three-quarter view: seen from the front and a little above, standing on the floor.
  */
 export class Pen {
   readonly style: WallStyle;
   readonly p: SkinPalette;
   readonly def: StyleDef;
-  readonly rot: boolean;
-  readonly L: number;
+  /** frame size in sprite units (100 = one cell). */
+  readonly w: number;
+  readonly h: number;
   readonly shadows: JSX.Element[] = [];
   readonly glows: JSX.Element[] = [];
   /** main blocking bodies in final (board-local) coordinates, for style overlays. */
@@ -55,12 +57,12 @@ export class Pen {
   private readonly vary: () => number;
   private k = 0;
 
-  constructor(o: { def: StyleDef; palette: SkinPalette; rot: boolean; L: number; seed: number }) {
+  constructor(o: { def: StyleDef; palette: SkinPalette; w: number; h: number; seed: number }) {
     this.def = o.def;
     this.style = o.def.id;
     this.p = o.palette;
-    this.rot = o.rot;
-    this.L = o.L;
+    this.w = o.w;
+    this.h = o.h;
     this.jit = rng(o.seed ^ 0x5bd1e995);
     this.vary = rng(o.seed);
   }
@@ -79,10 +81,6 @@ export class Pen {
     return `p${this.k++}`;
   }
 
-  private X(s: Shape): Shape {
-    return this.rot ? rot90(s) : s;
-  }
-
   private d(S: Shape, ampK = 1): string {
     const amp = this.def.rough * ampK;
     if (amp <= 0) return toD(S);
@@ -96,13 +94,13 @@ export class Pen {
 
   /** A filled part with outline in the current style. */
   body(s: Shape, m: Material, o: BodyOpts = {}): JSX.Element {
-    const S = this.X(s);
+    const S = s;
     const def = this.def;
     const open = !!o.open;
     const main = !!o.main;
     const look = def.body(m, open, this.p);
     if (main && !open) this.solids.push({ s: S, m });
-    if (o.cast ?? (main && !open)) this.castShadow(S);
+    if (o.cast) this.castShadow(S);
     if (o.glow ?? main) this.addGlow(S, m, open);
     const trim = main && this.closed(S) && def.trim ? def.trim(open, this.p) : null;
     const scallop = trim?.kind === 'scallop' ? scallopD(sample(S).pts, trim.size) : null;
@@ -135,7 +133,7 @@ export class Pen {
           d={outline}
           fill="none"
           stroke={stroke}
-          strokeWidth={look.sw}
+          strokeWidth={look.sw * (o.sw ?? 1)}
           strokeOpacity={look.strokeOpacity}
           strokeLinejoin="round"
           strokeLinecap="round"
@@ -145,7 +143,7 @@ export class Pen {
             d={this.d(S, 1.3)}
             fill="none"
             stroke={look.stroke}
-            strokeWidth={look.sw * def.pass2.swK}
+            strokeWidth={look.sw * (o.sw ?? 1) * def.pass2.swK}
             strokeOpacity={look.strokeOpacity * def.pass2.opacity}
             strokeDasharray={def.pass2.dash}
             strokeLinecap="round"
@@ -157,7 +155,7 @@ export class Pen {
 
   /** A detail line (seams, slats, piping). */
   line(s: Shape, o: LineOpts = {}): JSX.Element {
-    const S = this.X(s);
+    const S = s;
     const l = this.def.line(!!o.fine, this.p);
     return (
       <path
@@ -179,8 +177,8 @@ export class Pen {
     const amp = this.def.rough * 0.5;
     let d = '';
     for (const [a0, b0] of segs) {
-      const a = this.rot ? rotPt(a0) : a0;
-      const b = this.rot ? rotPt(b0) : b0;
+      const a = a0;
+      const b = b0;
       const ja = amp > 0 ? (this.jit() - 0.5) * amp : 0;
       const jb = amp > 0 ? (this.jit() - 0.5) * amp : 0;
       d += `M${r1(a[0] + ja)} ${r1(a[1] - jb)}L${r1(b[0] + jb)} ${r1(b[1] + ja)}`;
@@ -200,7 +198,7 @@ export class Pen {
 
   /** Trim and fittings: filled (closed shapes) or a stroked line (`fill: false` or open shapes). */
   accent(s: Shape, o: { fill?: boolean; sw?: number; glow?: boolean } = {}): JSX.Element {
-    const S = this.X(s);
+    const S = s;
     const a = this.def.accent(this.p);
     const filled = (o.fill ?? true) && this.closed(S);
     if (o.glow) this.addGlow(S, 'brass', false, a.line);
@@ -231,26 +229,11 @@ export class Pen {
   }
 
   /** A thick bar along a path (anchor shank, rails, legs) in a material. */
-  bar(s: Shape, width: number, m: Material, o: { open?: boolean; main?: boolean; fill?: string } = {}): JSX.Element {
-    const S = this.X(s);
+  bar(s: Shape, width: number, m: Material, o: { open?: boolean; main?: boolean; fill?: string; sw?: number } = {}): JSX.Element {
+    const S = s;
     const look = this.def.body(m, !!o.open, this.p);
     const d = this.d(S, 0.6);
     if (o.main) {
-      const sh = this.def.shadow(this.p);
-      if (sh) {
-        this.shadows.push(
-          <path
-            key={this.key()}
-            d={toD(translate(S, sh.dx, sh.dy))}
-            fill="none"
-            stroke={sh.color}
-            strokeOpacity={sh.hatch ? 0.32 : sh.opacity}
-            strokeWidth={width + look.sw}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />,
-        );
-      }
       const g = this.def.glow(m, !!o.open, this.p);
       if (g) {
         this.glows.push(
@@ -260,7 +243,7 @@ export class Pen {
     }
     return (
       <g fill="none" strokeLinecap="round" strokeLinejoin="round">
-        <path d={d} stroke={look.stroke} strokeOpacity={look.strokeOpacity} strokeWidth={width + look.sw * 2} />
+        <path d={d} stroke={look.stroke} strokeOpacity={look.strokeOpacity} strokeWidth={width + look.sw * 2 * (o.sw ?? 0.7)} />
         <path d={d} stroke={this.def.barInner(this.p)} strokeWidth={width} />
         <path d={d} stroke={o.fill ?? look.fill} strokeOpacity={look.fillOpacity} strokeWidth={width} />
       </g>
@@ -269,19 +252,19 @@ export class Pen {
 
   /** Any hatch / stripes / sprinkles inside a region. */
   pattern(s: Shape, h: Hatch): JSX.Element | null {
-    return this.hatchEl(this.X(s), h);
+    return this.hatchEl(s, h);
   }
 
   /** Style shading inside a region (sides, recesses). */
   shade(s: Shape, k = 1): JSX.Element | null {
-    const S = this.X(s);
+    const S = s;
     const h = this.def.shade(this.p);
     return this.hatchEl(S, { ...h, opacity: Math.min(1, h.opacity * k) });
   }
 
-  /** Glass pane with reflections. */
-  glass(s: Shape): JSX.Element {
-    const S = this.X(s);
+  /** Glass pane with reflections; `k` scales its tint (lower = clearer, to show what is behind). */
+  glass(s: Shape, k = 1): JSX.Element {
+    const S = s;
     const g = this.def.glass(this.p);
     const { pts } = sample(S);
     const b = shapeBox(S);
@@ -296,8 +279,8 @@ export class Pen {
     const l = this.def.line(true, this.p);
     return (
       <g>
-        <path d={toD(S)} fill={g.fill} fillOpacity={g.opacity} stroke={l.stroke} strokeWidth={l.sw} strokeOpacity={l.opacity} />
-        <path d={d1} stroke={g.streak} strokeOpacity={g.streakOpacity} strokeWidth={Math.max(1.6, Math.min(b.w, b.h) * 0.06)} strokeLinecap="round" fill="none" />
+        <path d={toD(S)} fill={g.fill} fillOpacity={g.opacity * k} stroke={l.stroke} strokeWidth={l.sw} strokeOpacity={l.opacity} />
+        <path d={d1} stroke={g.streak} strokeOpacity={g.streakOpacity * Math.min(1, 0.4 + k * 0.6)} strokeWidth={Math.max(1.6, Math.min(b.w, b.h) * 0.06 * Math.min(1, 0.5 + k * 0.5))} strokeLinecap="round" fill="none" />
       </g>
     );
   }
@@ -313,7 +296,7 @@ export class Pen {
   }
 
   text(x: number, y: number, str: string, size: number, o: { color?: string; opacity?: number; weight?: number; spacing?: number; font?: string } = {}): JSX.Element {
-    const [X, Y] = this.rot ? rotPt([x, y]) : [x, y];
+    const [X, Y] = [x, y];
     return (
       <text
         x={r1(X)}
@@ -334,7 +317,7 @@ export class Pen {
 
   /** Pool of light around a lamp (drawn under the piece). */
   halo(cx: number, cy: number, r: number): JSX.Element {
-    const [X, Y] = this.rot ? rotPt([cx, cy]) : [cx, cy];
+    const [X, Y] = [cx, cy];
     const p = this.p;
     if (this.style === 'blueprint' || this.style === 'chalk') {
       const c = this.style === 'chalk' ? p.accent : p.wall;
@@ -348,6 +331,42 @@ export class Pen {
         <circle cx={X} cy={Y} r={r * 0.56} fillOpacity={0.12 * k} />
       </g>
     );
+  }
+
+  /**
+   * Soft contact shadow on the floor under a piece (drawn beneath everything).
+   * Styles without shadows (blueprint, chalk) get a faint dashed footprint instead.
+   */
+  ground(cx: number, cy: number, rx: number, ry: number, k = 1): void {
+    const sh = this.def.shadow(this.p);
+    const S = ell(cx, cy, rx, ry);
+    if (!sh) {
+      const l = this.def.line(true, this.p);
+      this.shadows.push(
+        <path key={this.key()} d={this.d(S, 0.5)} fill="none" stroke={l.stroke} strokeWidth={l.sw} strokeOpacity={l.opacity * 0.55 * k} strokeDasharray="3 3" />,
+      );
+      return;
+    }
+    if (sh.hatch) {
+      const el = this.hatchEl(S, { ...sh.hatch, opacity: sh.hatch.opacity * 0.8 * k });
+      if (el) this.shadows.push(<g key={this.key()}>{el}</g>);
+      return;
+    }
+    const o = Math.min(0.55, sh.opacity * (sh.soft ? 1.7 : 1.05)) * k;
+    this.shadows.push(
+      <g key={this.key()} fill={sh.color}>
+        <path d={toD(ell(cx + 1, cy, rx * 1.12, ry * 1.25))} fillOpacity={o * 0.4} />
+        <path d={toD(S)} fillOpacity={o * 0.75} />
+        <path d={toD(ell(cx, cy - ry * 0.1, rx * 0.72, ry * 0.6))} fillOpacity={o * 0.6} />
+      </g>,
+    );
+  }
+
+  /** Light falling on an upward-facing surface (table tops, seat cushions, lids). */
+  lit(s: Shape, k = 1): JSX.Element | null {
+    const L = this.def.light ? this.def.light(this.p) : { color: "#ffffff", opacity: 0.16 };
+    if (!L || !this.closed(s)) return null;
+    return <path d={this.d(s, 0.3)} fill={L.color} fillOpacity={Math.min(1, L.opacity * k)} stroke="none" />;
   }
 
   // ───────────── internals ─────────────

@@ -1,8 +1,8 @@
 /**
- * Plain-number geometry for the plan sprites. Every sprite is described as a list of
- * `Shape`s in a 100-unit cell space; the Pen turns them into SVG in the active style.
- * Shapes are data (not paths) so they can be rotated exactly, roughened for hand-drawn
- * styles, and hatched by scanline without clipPath ids.
+ * Plain-number geometry for the furniture sprites. Every sprite is described as a list of
+ * `Shape`s in a 100-unit-per-cell space; the Pen turns them into SVG in the active style.
+ * Shapes are data (not paths) so they can be roughened for hand-drawn styles and hatched
+ * by scanline without clipPath ids.
  */
 export type Pt = [number, number];
 
@@ -82,24 +82,6 @@ export function spiral(cx: number, cy: number, r0: number, r1: number, turns: nu
     pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]);
   }
   return poly(pts, false);
-}
-
-/** Rotate a shape 90 deg clockwise inside a 100-wide frame: (x, y) -> (100 - y, x). */
-export function rot90(s: Shape): Shape {
-  switch (s.t) {
-    case 'rect':
-      return { t: 'rect', x: 100 - s.y - s.h, y: s.x, w: s.h, h: s.w, r: s.r };
-    case 'ell':
-      return { t: 'ell', cx: 100 - s.cy, cy: s.cx, rx: s.ry, ry: s.rx };
-    case 'arc':
-      return { t: 'arc', cx: 100 - s.cy, cy: s.cx, r: s.r, a0: s.a0 + 90, a1: s.a1 + 90 };
-    case 'poly':
-      return { t: 'poly', closed: s.closed, pts: s.pts.map(([x, y]) => [100 - y, x] as Pt) };
-  }
-}
-
-export function rotPt([x, y]: Pt): Pt {
-  return [100 - y, x];
 }
 
 export function translate(s: Shape, dx: number, dy: number): Shape {
@@ -404,4 +386,70 @@ export function scallopD(pts: Pt[], size: number): string {
     d += `A${f1(r)} ${f1(r)} 0 0 1 ${f1(x1)} ${f1(y1)}`;
   }
   return d + 'Z';
+}
+
+// ───────────── three-quarter view helpers ─────────────
+
+/** Points along an elliptical arc (degrees, clockwise from +x, y down). Includes both ends. */
+export function arcPts(cx: number, cy: number, rx: number, ry: number, a0: number, a1: number, n = 16): Pt[] {
+  const out: Pt[] = [];
+  for (let i = 0; i <= n; i++) {
+    const a = (a0 + ((a1 - a0) * i) / n) * RAD;
+    out.push([cx + Math.cos(a) * rx, cy + Math.sin(a) * ry]);
+  }
+  return out;
+}
+
+/** Rectangle with a separate radius per corner (top-left, top-right, bottom-right, bottom-left). */
+export function rr(x: number, y: number, w: number, h: number, tl: number, tr = tl, br = tl, bl = tl): Shape {
+  const lim = (r: number) => Math.max(0, Math.min(r, w / 2, h / 2));
+  const [a, b, c, d] = [lim(tl), lim(tr), lim(br), lim(bl)];
+  const pts: Pt[] = [];
+  const corner = (cx: number, cy: number, r: number, a0: number, px: number, py: number) => {
+    if (r < 0.5) pts.push([px, py]);
+    else pts.push(...arcPts(cx, cy, r, r, a0, a0 + 90, 5));
+  };
+  corner(x + a, y + a, a, 180, x, y);
+  corner(x + w - b, y + b, b, 270, x + w, y);
+  corner(x + w - c, y + h - c, c, 0, x + w, y + h);
+  corner(x + d, y + h - d, d, 90, x, y + h);
+  return poly(pts);
+}
+
+/** Quadrilateral top face of a box seen from the front and above: back edge narrower by `taper` each side. */
+export function topFace(x: number, y: number, w: number, d: number, taper = 0): Shape {
+  return poly([[x + taper, y], [x + w - taper, y], [x + w, y + d], [x, y + d]]);
+}
+
+/**
+ * Side of an upright cylinder (or a tapered tub when rxB differs): top ellipse centred (cx, y),
+ * bottom ellipse centred (cx, y + h). Draw the top ellipse over it.
+ */
+export function cylSide(cx: number, y: number, rx: number, ry: number, h: number, rxB = rx, ryB = ry): Shape {
+  return poly([...arcPts(cx, y + h, rxB, ryB, 180, 0, 18), ...arcPts(cx, y, rx, ry, 0, 180, 18)]);
+}
+
+/** A closed outline through points with smooth (Catmull-Rom) curves. */
+export function smooth(pts: Pt[], closed = true, n = 6): Shape {
+  const out: Pt[] = [];
+  const m = pts.length;
+  const at = (i: number): Pt => (closed ? pts[((i % m) + m) % m] : pts[Math.max(0, Math.min(m - 1, i))]);
+  const last = closed ? m : m - 1;
+  for (let i = 0; i < last; i++) {
+    const p0 = at(i - 1);
+    const p1 = at(i);
+    const p2 = at(i + 1);
+    const p3 = at(i + 2);
+    for (let k = 0; k < n; k++) {
+      const t = k / n;
+      const t2 = t * t;
+      const t3 = t2 * t;
+      out.push([
+        0.5 * (2 * p1[0] + (-p0[0] + p2[0]) * t + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * t2 + (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * t3),
+        0.5 * (2 * p1[1] + (-p0[1] + p2[1]) * t + (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * t2 + (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * t3),
+      ]);
+    }
+  }
+  if (!closed) out.push(pts[m - 1]);
+  return poly(out, closed);
 }

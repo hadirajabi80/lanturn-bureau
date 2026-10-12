@@ -28,9 +28,9 @@ export function skinFor(skin?: string): { style: WallStyle; palette: SkinPalette
   return { style: 'ink', palette: DISTRICTS[0].palette };
 }
 
-function drawOne(kind: FurnitureKind, L: number, rot: boolean, p: SpriteProps, seed: number): JSX.Element {
-  const pen = new Pen({ def: STYLE_DEFS[p.style] ?? STYLE_DEFS.ink, palette: p.palette, rot, L, seed });
-  const body = KINDS[kind].draw(pen, L);
+function drawOne(kind: FurnitureKind, w: number, h: number, p: SpriteProps, seed: number): JSX.Element {
+  const pen = new Pen({ def: STYLE_DEFS[p.style] ?? STYLE_DEFS.ink, palette: p.palette, w, h, seed });
+  const body = KINDS[kind].draw(pen, w, h);
   const overlay = pen.def.decorate ? pen.def.decorate(pen) : null;
   return (
     <g>
@@ -42,7 +42,7 @@ function drawOne(kind: FurnitureKind, L: number, rot: boolean, p: SpriteProps, s
   );
 }
 
-/** Draws `kind` filling a w x h box (sprite units). Vertical 2-cell boxes are rotated, never squashed. */
+/** Draws `kind` filling a w x h box (sprite units). Vertical 2-cell boxes get their own tall drawing, never a squashed one. */
 export function drawSprite(kind: FurnitureKind, p: SpriteProps): JSX.Element {
   const def = KINDS[kind];
   const seed = p.seed ?? hash(`${kind}:${p.w}x${p.h}`);
@@ -54,12 +54,12 @@ export function drawSprite(kind: FurnitureKind, p: SpriteProps): JSX.Element {
       for (let c = 0; c < cols; c++) {
         out.push(
           <g key={`${r},${c}`} transform={`translate(${c * 100} ${r * 100})`}>
-            {drawOne(kind, 100, false, p, seed + r * 31 + c * 7)}
+            {drawOne(kind, 100, 100, p, seed + r * 31 + c * 7)}
           </g>,
         );
       }
     }
     return <g>{out}</g>;
   }
-  return drawOne(kind, Math.max(cols, rows) * 100, rows > cols, p, seed);
+  return drawOne(kind, cols * 100, rows * 100, p, seed);
 }

@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import { circ, leaf, ngon, poly, type Pt } from '../core/geom';
+import { circ, leaf, ngon } from '../core/geom';
 import type { Pen } from '../core/pen';
 
 /** Small decorative helpers shared by the light districts (ribbon / lace / candy). */
@@ -16,22 +16,6 @@ export function flower(pen: Pen, cx: number, cy: number, r: number, color: strin
       {pen.dot(cx, cy, r * 0.28, 'fruit', {})}
     </g>
   );
-}
-
-/** Disc split into alternating wedges (striped umbrella / popcorn tub / carousel canopy). */
-export function wedges(pen: Pen, cx: number, cy: number, r: number, n: number, a: string, b: string): JSX.Element {
-  const out: JSX.Element[] = [];
-  for (let i = 0; i < n; i++) {
-    const a0 = (i / n) * Math.PI * 2;
-    const a1 = ((i + 1) / n) * Math.PI * 2;
-    const pts: Pt[] = [[cx, cy]];
-    for (let k = 0; k <= 6; k++) {
-      const t = a0 + ((a1 - a0) * k) / 6;
-      pts.push([cx + Math.cos(t) * r, cy + Math.sin(t) * r]);
-    }
-    out.push(<g key={i}>{pen.body(poly(pts), 'fabric', { fill: i % 2 ? b : a, tex: false })}</g>);
-  }
-  return <g>{out}</g>;
 }
 
 /** A ribbon bow (two loops and a knot). */
@@ -59,16 +43,6 @@ export function bubbles(pen: Pen, pts: [number, number, number][]): JSX.Element 
       ))}
     </g>
   );
-}
-
-/** Ring of macarons (top view) - stack them with shrinking radii for a tower. */
-export function macarons(pen: Pen, cx: number, cy: number, ring: number, n: number, size: number, offset = 0): JSX.Element {
-  const out: JSX.Element[] = [];
-  for (let i = 0; i < n; i++) {
-    const a = (i / n) * Math.PI * 2 + offset;
-    out.push(<g key={i}>{pen.dot(cx + Math.cos(a) * ring, cy + Math.sin(a) * ring, size, 'fabric', { fill: pen.tint(i + n) })}</g>);
-  }
-  return <g>{out}</g>;
 }
 
 /** Five-point star. */

@@ -1,195 +1,330 @@
 import type { JSX } from 'react';
-import { arc, circ, ngon, poly, rect, seg, spiral, type Pt } from '../core/geom';
-import { bow, star, wedges } from './ornaments';
+import { arcPts, ell, ngon, poly, rect, rotPts, rr, seg, topFace, type Pt, type Shape } from '../core/geom';
+import { box, cyl, wheel, wrap } from '../core/kit';
 import type { Pen } from '../core/pen';
+import { bow, star } from './ornaments';
 
 /** Cargo & travel (all blocking): crate, barrel, anchor, suitcase, trolley. */
 const M = { main: true } as const;
 
-const STENCILS = ['HPD', 'No.7', 'TEA', 'FRAGILE', 'RUM', 'G&W', 'XXX', 'H.P.'];
+const STENCILS = ['HPD', 'No.7', 'TEA', 'RUM', 'G&W', 'XXX', 'H.P.'];
+
+// ───────────── crate ─────────────
 
 export function Crate(pen: Pen): JSX.Element {
   const stencil = STENCILS[Math.floor(pen.rand() * STENCILS.length)];
-  const planks: [Pt, Pt][] = [[[16, 32], [84, 32]], [[16, 50], [84, 50]], [[16, 68], [84, 68]]];
+  if (pen.style === 'neon') return PlasticCrates(pen);
+  const x0 = 12;
+  const x1 = 88;
+  const top = 18;
+  const d = 15;
+  const y0 = top + d;
+  const y1 = 88;
+  const planks: [Pt, Pt][] = [1, 2, 3].map((i) => [[x0 + 1, y0 + ((y1 - y0) * i) / 4], [x1 - 1, y0 + ((y1 - y0) * i) / 4]]);
+  pen.ground(50, 89, 42, 4.5);
+  const frame = (
+    <g>
+      {pen.body(rect(x0, y0, 9, y1 - y0, 0.5), 'wood', { tex: false, sw: 0.8 })}
+      {pen.body(rect(x1 - 9, y0, 9, y1 - y0, 0.5), 'wood', { tex: false, sw: 0.8 })}
+      {pen.body(rect(x0, y0, x1 - x0, 8, 0.5), 'wood', { tex: false, sw: 0.8 })}
+      {pen.body(rect(x0, y1 - 8, x1 - x0, 8, 0.5), 'wood', { tex: false, sw: 0.8 })}
+    </g>
+  );
+  const nails = [[x0 + 4.5, y0 + 4], [x1 - 4.5, y0 + 4], [x0 + 4.5, y1 - 4], [x1 - 4.5, y1 - 4]].map(([x, y], i) => <g key={i}>{pen.stud(x, y, 1.4)}</g>);
+  const lid = (
+    <g>
+      {pen.body(topFace(x0, top, x1 - x0, d, 6), 'wood', { tex: false, sw: 0.85 })}
+      {pen.lit(topFace(x0, top, x1 - x0, d, 6))}
+      {pen.lines([[[x0 + 3, top + d * 0.5], [x1 - 3, top + d * 0.5]]], { fine: true })}
+    </g>
+  );
   if (pen.style === 'rope') {
     return (
       <g>
-        {pen.body(rect(13, 13, 74, 74, 2), 'wood', M)}
+        {pen.body(rect(x0, y0, x1 - x0, y1 - y0, 1), 'wood', M)}
         {pen.lines(planks, { fine: true })}
-        {pen.bar(seg(24, 10, 24, 90), 3.2, 'rope')}
-        {pen.bar(seg(10, 76, 90, 76), 3.2, 'rope')}
-        {pen.text(55, 44, stencil, stencil.length > 4 ? 10 : 15, { opacity: 0.6, spacing: 1 })}
-        {pen.stud(18, 18, 1.6)}
-        {pen.stud(82, 18, 1.6)}
-        {pen.stud(18, 82, 1.6)}
-        {pen.stud(82, 82, 1.6)}
+        {frame}
+        {pen.text(50, 61, stencil, stencil.length > 3 ? 10 : 14, { opacity: 0.6, spacing: 1 })}
+        {lid}
+        {pen.bar(poly([[30, y1], [30, y0], [34, top]], false), 3.2, 'rope')}
+        {pen.bar(poly([[x0 - 1, 70], [x1 + 1, 70]], false), 3.2, 'rope')}
+        {nails}
       </g>
     );
   }
   if (pen.style === 'candy') {
-    // prize crate: candy-striped planks, a big star and two little ones
     return (
       <g>
-        {pen.body(rect(13, 13, 74, 74, 4), 'wood', M)}
+        {pen.body(rect(x0, y0, x1 - x0, y1 - y0, 3), 'wood', M)}
         {pen.lines(planks, { fine: true })}
-        {pen.body(star(50, 46, 20), 'brass', { gloss: false })}
-        {pen.dot(46, 42, 2, 'paper', {})}
-        {pen.body(star(24, 76, 6), 'fabric', { fill: pen.tint(1) })}
-        {pen.body(star(77, 23, 6), 'fabric', { fill: pen.tint(0) })}
-        {pen.text(52, 76, 'PRIZE', 7.5, { color: pen.p.accent })}
+        {pen.body(star(50, 58, 17), 'brass', { gloss: false })}
+        {pen.dot(46, 54, 2, 'paper', {})}
+        {pen.body(star(24, 46, 5), 'fabric', { fill: pen.tint(1) })}
+        {pen.body(star(76, 76, 5), 'fabric', { fill: pen.tint(0) })}
+        {pen.text(50, 81, 'PRIZE', 7.5, { color: pen.p.accent })}
+        {lid}
       </g>
     );
   }
-  if (pen.style === 'neon') {
-    // stacked plastic crates with a grid of hand-holes
-    return (
-      <g>
-        {pen.body(rect(13, 13, 74, 74, 6), 'metal', M)}
-        {pen.lines([[[25, 18], [25, 82]], [[37.5, 18], [37.5, 82]], [[50, 18], [50, 82]], [[62.5, 18], [62.5, 82]], [[75, 18], [75, 82]], [[18, 30], [82, 30]], [[18, 50], [82, 50]], [[18, 70], [82, 70]]], { fine: true })}
-        {pen.accent(rect(38, 15, 24, 5, 2.5), { fill: false, glow: true, sw: 1.4 })}
-      </g>
-    );
-  }
+  // planked crate with an X brace
   return (
     <g>
-      {pen.body(rect(13, 13, 74, 74, 2), 'wood', M)}
-      {pen.line(rect(21, 21, 58, 58, 0), {})}
-      {pen.lines(planks.map(([a, b]) => [[a[0] + 6, a[1]], [b[0] - 6, b[1]]] as [Pt, Pt]), { fine: true })}
-      {pen.bar(seg(24, 24, 76, 76), 5, 'wood')}
-      {pen.stud(17, 17, 1.6)}
-      {pen.stud(83, 17, 1.6)}
-      {pen.stud(17, 83, 1.6)}
-      {pen.stud(83, 83, 1.6)}
+      {pen.body(rect(x0, y0, x1 - x0, y1 - y0, 1), 'wood', M)}
+      {pen.lines(planks, { fine: true })}
+      {pen.bar(seg(x0 + 9, y0 + 8, x1 - 9, y1 - 8), 5, 'wood')}
+      {pen.bar(seg(x1 - 9, y0 + 8, x0 + 9, y1 - 8), 5, 'wood')}
+      {frame}
+      {lid}
+      {nails}
     </g>
   );
+}
+
+/** Neon Quarter: two stacked plastic crates with hand-holes. */
+function PlasticCrates(pen: Pen): JSX.Element {
+  pen.ground(50, 89, 42, 4.5);
+  const crate = (y: number, k: number) => (
+    <g key={k}>
+      {pen.body(rect(12, y, 76, 32, 4), 'metal', M)}
+      {pen.lines([1, 2, 3, 4, 5].map((i) => [[12 + i * 12.6, y + 12], [12 + i * 12.6, y + 29]] as [Pt, Pt]), { fine: true })}
+      {pen.accent(rr(40, y + 3.5, 20, 5.5, 2.7), { fill: false, glow: true, sw: 1.4 })}
+    </g>
+  );
+  return (
+    <g>
+      {crate(56, 0)}
+      {crate(24, 1)}
+      {pen.body(topFace(12, 14, 76, 10, 5), 'metal', { tex: false, sw: 0.85 })}
+      {pen.shade(topFace(16, 16, 68, 7, 4), 1)}
+    </g>
+  );
+}
+
+// ───────────── barrel ─────────────
+
+/** Bulging barrel side outline (top ellipse at y0, bottom at y1). */
+function barrelSide(cx: number, y0: number, y1: number, r: number, bulge: number, ry: number): Shape {
+  const left: Pt[] = [];
+  const right: Pt[] = [];
+  for (let i = 0; i <= 12; i++) {
+    const t = i / 12;
+    const y = y0 + (y1 - y0) * t;
+    const rr2 = r + bulge * Math.sin(Math.PI * t);
+    left.push([cx - rr2, y]);
+    right.push([cx + rr2, y]);
+  }
+  return poly([...left, ...arcPts(cx, y1, r, ry, 180, 0, 14).slice(1, -1), ...right.reverse(), ...arcPts(cx, y0, r, ry, 0, 180, 14).slice(1, -1)]);
 }
 
 export function Barrel(pen: Pen): JSX.Element {
-  if (pen.style === 'candy') {
-    // popcorn barrel: red & white striped tub heaped with popcorn
-    const corn: JSX.Element[] = [];
-    for (let i = 0; i < 22; i++) {
-      const a = pen.rand() * Math.PI * 2;
-      const r = Math.sqrt(pen.rand()) * 19;
-      corn.push(<g key={i}>{pen.body(ngon(50 + Math.cos(a) * r, 50 + Math.sin(a) * r, 4.2, 6, pen.rand() * 60, 3), 'fruit', { fill: i % 3 ? '#fff6dc' : '#ffe08a' })}</g>);
-    }
+  if (pen.style === 'candy') return PopcornTub(pen);
+  const cx = 50;
+  const y0 = 18;
+  const y1 = 84;
+  const r = 24;
+  const bulge = 7;
+  const ry = 7;
+  const at = (t: number) => r + bulge * Math.sin(Math.PI * t);
+  pen.ground(50, 88, 30, 5);
+  if (pen.style === 'neon') {
+    // oil drum
     return (
       <g>
-        {pen.body(circ(50, 50, 34), 'fabric', { ...M, tex: false })}
-        {wedges(pen, 50, 50, 33, 16, pen.p.danger, '#ffffff')}
-        {pen.body(circ(50, 50, 24), 'fruit', { fill: '#fff1c8' })}
-        {corn}
+        {cyl(pen, cx, y0, 27, ry, y1 - y0, 'metal', M)}
+        {[0.33, 0.66].map((t) => <g key={t}>{pen.accent(wrap(cx, y0 + (y1 - y0) * t, 27, ry), { fill: false, sw: 2.2, glow: true })}</g>)}
+        {pen.dot(cx + 12, y0, 2.6, 'metal', {})}
+        {pen.text(cx, 56, 'OIL', 9, {})}
       </g>
     );
   }
-  const staves: [Pt, Pt][] = [-14, -7, 0, 7, 14].map((dx) => {
-    const h = Math.sqrt(21 * 21 - dx * dx);
-    return [[50 + dx, 50 - h], [50 + dx, 50 + h]];
+  const staves: Shape[] = [-0.62, -0.3, 0, 0.3, 0.62].map((f) => {
+    const pts: Pt[] = [];
+    for (let i = 0; i <= 10; i++) {
+      const t = i / 10;
+      pts.push([cx + f * at(t), y0 + (y1 - y0) * t + Math.sqrt(1 - f * f) * ry * 0.95]);
+    }
+    return poly(pts, false);
   });
   return (
     <g>
-      {pen.body(circ(50, 50, 34), pen.style === 'neon' ? 'metal' : 'wood', M)}
-      {pen.accent(circ(50, 50, 31.5), { fill: false, sw: 3 })}
-      {pen.body(circ(50, 50, 23), 'wood', { alpha: 0.9 })}
-      {pen.accent(circ(50, 50, 23), { fill: false, sw: 2 })}
-      {pen.lines(staves, { fine: true })}
-      {pen.dot(61, 50, 3.4, 'darkwood', {})}
-      {pen.style === 'rope' && pen.text(42, 44, 'XO', 7, { opacity: 0.5 })}
+      {pen.body(barrelSide(cx, y0, y1, r, bulge, ry), 'wood', M)}
+      {staves.map((s, i) => <g key={i}>{pen.line(s, { fine: true })}</g>)}
+      {[0.12, 0.36, 0.64, 0.88].map((t) => <g key={t}>{pen.accent(wrap(cx, y0 + (y1 - y0) * t, at(t) + 0.6, ry), { fill: false, sw: 2.6 })}</g>)}
+      {pen.body(ell(cx, y0, r, ry), 'wood', { tex: false, sw: 0.9 })}
+      {pen.lit(ell(cx, y0, r, ry))}
+      {pen.lines([[[cx - 18, y0 - 2.5], [cx + 18, y0 - 2.5]], [[cx - 20, y0 + 2.5], [cx + 20, y0 + 2.5]]], { fine: true })}
+      {pen.dot(cx + 8, y0, 2.6, 'darkwood', {})}
+      {pen.body(rect(cx - 5, 52, 10, 7, 1.5), 'darkwood', { tex: false, sw: 0.7 })}
+      {pen.style === 'rope' && pen.text(cx, 68, 'XO', 8, { opacity: 0.55 })}
     </g>
   );
 }
+
+/** Cotton Candy Pier: striped popcorn tub heaped with popcorn. */
+function PopcornTub(pen: Pen): JSX.Element {
+  const cx = 50;
+  const y0 = 34;
+  const y1 = 86;
+  pen.ground(50, 88, 26, 4.5);
+  const side = poly([...arcPts(cx, y1, 19, 5, 180, 0, 14), ...arcPts(cx, y0, 27, 7, 0, 180, 14)]);
+  const stripes: JSX.Element[] = [];
+  for (let i = -2; i <= 2; i++) {
+    const tx = i / 3;
+    stripes.push(<g key={i}>{pen.body(poly([[cx + tx * 27 - 3.6, y0 + 6], [cx + tx * 27 + 3.6, y0 + 6], [cx + tx * 19 + 2.6, y1 + 4], [cx + tx * 19 - 2.6, y1 + 4]]), 'fabric', { fill: pen.p.danger, tex: false, sw: 0.01, alpha: 0.95 })}</g>);
+  }
+  const corn: JSX.Element[] = [];
+  for (let i = 0; i < 18; i++) {
+    const a = Math.PI + pen.rand() * Math.PI;
+    const r = Math.sqrt(pen.rand());
+    const x = cx + Math.cos(a) * 24 * r;
+    const y = y0 + Math.sin(a) * 18 * r;
+    corn.push(<g key={i}>{pen.body(ngon(x, y, 4.4, 6, pen.rand() * 60, 3.2), 'fruit', { fill: i % 3 ? '#fff6dc' : '#ffe08a', tex: false, sw: 0.7 })}</g>);
+  }
+  return (
+    <g>
+      {pen.body(side, 'linen', { ...M, tex: false })}
+      {stripes}
+      {pen.body(side, 'linen', { alpha: 0, tex: false })}
+      {pen.body(ell(cx, y0, 27, 7), 'fruit', { fill: '#fff1c8', tex: false })}
+      {corn}
+      {pen.text(cx, 62, 'POP', 9, { color: '#ffffff' })}
+    </g>
+  );
+}
+
+// ───────────── anchor ─────────────
 
 export function Anchor(pen: Pen): JSX.Element {
   const coil = pen.style === 'rope';
-  const cx = coil ? 40 : 50;
-  const flA = arc(cx, 56, 24, 30, 150);
+  const cx = coil ? 42 : 50;
+  const arm = poly(arcPts(cx, 50, 28, 30, 25, 155, 18), false);
   const fluke = (sx: number): Pt[] => {
-    const x = cx + sx * 20.8;
-    return [[x, 68], [x + sx * 10, 58], [x + sx * 2, 74]];
+    const [x, y] = arcPts(cx, 50, 28, 30, sx > 0 ? 25 : 155, sx > 0 ? 25 : 155, 1)[0];
+    return [[x - sx * 3, y + 4], [x + sx * 9, y - 12], [x + sx * 4, y + 2], [x + sx * 1, y + 6]];
   };
+  pen.ground(cx, 88, 30, 4);
   return (
     <g>
-      {coil && pen.bar(spiral(74, 72, 3, 18, 3), 3.4, 'rope', { main: true })}
-      {pen.bar(seg(cx, 22, cx, 80), 7, 'metal', { main: true })}
-      {pen.bar(seg(cx - 18, 30, cx + 18, 30), 4.5, 'darkwood', { main: true })}
-      {pen.dot(cx - 19, 30, 3.4, 'darkwood', {})}
-      {pen.dot(cx + 19, 30, 3.4, 'darkwood', {})}
-      {pen.bar(flA, 6.5, 'metal', { main: true })}
-      {pen.body(poly(fluke(1)), 'metal', {})}
-      {pen.body(poly(fluke(-1)), 'metal', {})}
-      {pen.bar(circ(cx, 14, 6.5), 3, 'metal')}
-      {coil && pen.bar(poly([[cx + 5, 12], [60, 22], [70, 52]], false), 2.4, 'rope')}
+      {coil && (
+        <g>
+          {[0, 1, 2].map((i) => <g key={i}>{pen.bar(poly(arcPts(76, 84 - i * 5, 18 - i * 2.5, 6 - i * 0.6, 0, 360, 24)), 4, 'rope')}</g>)}
+        </g>
+      )}
+      {pen.bar(seg(cx, 20, cx, 78), 7, 'metal', { main: true })}
+      {pen.bar(arm, 6.5, 'metal', { main: true })}
+      {pen.body(poly(fluke(1)), 'metal', { tex: false })}
+      {pen.body(poly(fluke(-1)), 'metal', { tex: false })}
+      {pen.body(ell(cx, 80, 5.5, 4.5), 'metal', { tex: false })}
+      {pen.bar(seg(cx - 22, 26, cx + 22, 26), 4.6, 'darkwood', { main: true })}
+      {pen.dot(cx - 23, 26, 3.6, 'darkwood', {})}
+      {pen.dot(cx + 23, 26, 3.6, 'darkwood', {})}
+      {pen.bar(ell(cx, 13, 6.5, 6.5), 3, 'metal')}
+      {coil && pen.bar(poly([[cx + 5, 12], [62, 30], [70, 62], [64, 78]], false), 2.6, 'rope')}
     </g>
   );
 }
+
+// ───────────── suitcase ─────────────
 
 export function Suitcase(pen: Pen): JSX.Element {
-  if (pen.style === 'lace') {
-    // stacked hatboxes tied with a ribbon bow
-    return (
-      <g>
-        {pen.body(circ(56, 56, 30), 'leather', { ...M, tex: false })}
-        {pen.pattern(circ(56, 56, 28), { kind: 'lines', angle: 90, spacing: 8, sw: 3, color: '#ffffff', opacity: 0.55 })}
-        {pen.line(circ(56, 56, 25), { fine: true })}
-        {pen.body(circ(38, 38, 18), 'fabric', { fill: pen.tint(0), cast: true })}
-        {pen.line(circ(38, 38, 14.5), { fine: true })}
-        {pen.accent(seg(38, 20, 38, 56), { fill: false, sw: 2.4 })}
-        {bow(pen, 38, 38, 9, pen.p.accent2)}
-      </g>
-    );
-  }
+  if (pen.style === 'lace') return Hatboxes(pen);
   const mat = pen.style === 'neon' ? 'metal' : 'leather';
+  const x0 = 16;
+  const x1 = 84;
+  const top = 32;
+  const bottom = 86;
+  pen.ground(50, 89, 38, 4.5);
   return (
     <g>
-      {pen.body(rect(18, 26, 64, 52, 6), mat, M)}
-      {pen.line(rect(22, 30, 56, 44, 4), { fine: true, dash: '2 2' })}
-      {pen.accent(seg(36, 26, 36, 78), { fill: false, sw: 3 })}
-      {pen.accent(seg(64, 26, 64, 78), { fill: false, sw: 3 })}
-      {pen.body(rect(42, 18, 16, 9, 4), mat, {})}
-      {pen.stud(22, 30, 2.2)}
-      {pen.stud(78, 30, 2.2)}
-      {pen.stud(22, 74, 2.2)}
-      {pen.stud(78, 74, 2.2)}
-      {pen.body(rect(44, 54, 13, 9, 1), 'paper', { fill: pen.tint(2) })}
+      {pen.bar(poly([[40, top], [40, top - 10], [60, top - 10], [60, top]], false), 3.4, 'leather')}
+      {box(pen, x0, top - 6, x1 - x0, bottom - top + 6, 6, mat, { ...M, r: 6, taper: 2 })}
+      {pen.line(seg(x0 + 1, top + 8, x1 - 1, top + 8), { fine: true })}
+      {[34, 66].map((x) => (
+        <g key={x}>
+          {pen.accent(seg(x, top - 5, x, bottom), { fill: false, sw: 3.2 })}
+          {pen.accent(rect(x - 3, top + 14, 6, 5, 1))}
+        </g>
+      ))}
+      {[[x0 + 4, top + 2], [x1 - 4, top + 2], [x0 + 4, bottom - 4], [x1 - 4, bottom - 4]].map(([x, y], i) => <g key={i}>{pen.stud(x, y, 2.2)}</g>)}
+      {/* travel stickers + a luggage tag */}
+      {pen.body(ell(50, 58, 8, 6), 'paper', { fill: pen.tint(2), tex: false, sw: 0.7 })}
+      {pen.body(rr(41, 68, 14, 9, 1.5), 'paper', { fill: pen.tint(4), tex: false, sw: 0.7 })}
+      {pen.line(poly([[58, top - 6], [70, top + 6]], false), { fine: true })}
+      {pen.body(poly(rotPts([[68, top + 4], [78, top + 4], [78, top + 18], [68, top + 18]] as Pt[], 73, top + 11, 14)), 'paper', { tex: false, sw: 0.7 })}
     </g>
   );
 }
 
-export function Trolley(pen: Pen): JSX.Element {
-  if (pen.style === 'candy') {
-    // candy-floss cart under a striped parasol, with floss clouds peeking out
-    const puffs: [number, number, number][] = [[22, 82, 7], [33, 87, 6], [78, 83, 7]];
-    const wheels: Pt[] = [[16, 16], [84, 16], [16, 84], [84, 84]];
-    return (
-      <g>
-        {wheels.map(([x, y], i) => (
-          <g key={i}>{pen.dot(x, y, 5, 'darkwood', {})}</g>
-        ))}
-        {pen.body(rect(12, 18, 76, 64, 6), 'metal', { ...M, alpha: 0.9 })}
-        {puffs.map(([x, y, r], i) => (
-          <g key={'c' + i}>{pen.body(ngon(x, y, r, 7, i * 20, r * 0.8), 'fabric', { fill: i === 1 ? pen.tint(1) : pen.tint(4) })}</g>
-        ))}
-        {wedges(pen, 50, 46, 30, 10, pen.p.accent, '#ffffff')}
-        {pen.accent(circ(50, 46, 4))}
-      </g>
-    );
-  }
-  const wheels: Pt[] = [[18, 18], [82, 18], [18, 82], [82, 82]];
-  const cart = pen.style === 'deco' || pen.style === 'marble' || pen.style === 'steel' ? 'brass' : 'metal';
+/** Boutique: stacked hatboxes tied with a ribbon bow. */
+function Hatboxes(pen: Pen): JSX.Element {
+  pen.ground(50, 89, 34, 4.5);
   return (
     <g>
-      {wheels.map(([x, y], i) => (
-        <g key={i}>{pen.dot(x, y, 5, 'darkwood', {})}</g>
-      ))}
-      {pen.body(rect(14, 20, 72, 60, 4), cart, { ...M, alpha: 0.75 })}
-      {pen.lines([[[16, 35], [84, 35]], [[16, 50], [84, 50]], [[16, 65], [84, 65]]], { fine: true })}
-      {pen.bar(seg(9, 22, 9, 78), 4, cart)}
-      {/* luggage */}
-      {pen.body(rect(24, 26, 40, 30, 4), 'leather', { fill: pen.tint(0) })}
-      {pen.accent(seg(34, 26, 34, 56), { fill: false, sw: 2 })}
-      {pen.accent(seg(54, 26, 54, 56), { fill: false, sw: 2 })}
-      {pen.body(rect(46, 52, 30, 22, 2), 'wood', {})}
-      {pen.lines([[[46, 63], [76, 63]]], { fine: true })}
+      {cyl(pen, 50, 52, 32, 9, 32, 'leather', { ...M, tex: false })}
+      {pen.pattern(rect(18, 54, 64, 32), { kind: 'lines', angle: 90, spacing: 9, sw: 3.2, color: '#ffffff', opacity: 0.45 })}
+      {pen.line(wrap(50, 58, 32, 9), { fine: true })}
+      {cyl(pen, 48, 30, 21, 6, 20, 'fabric', { fill: pen.tint(0) })}
+      {pen.line(wrap(48, 35, 21, 6), { fine: true })}
+      {pen.accent(seg(48, 30, 48, 56), { fill: false, sw: 2.6 })}
+      {bow(pen, 48, 26, 9, pen.p.accent2)}
     </g>
   );
 }
+
+// ───────────── trolley ─────────────
+
+export function Trolley(pen: Pen): JSX.Element {
+  if (pen.style === 'candy') return FlossCart(pen);
+  const frame = pen.style === 'deco' || pen.style === 'marble' || pen.style === 'steel' || pen.style === 'lace' || pen.style === 'ribbon' ? 'brass' : 'metal';
+  pen.ground(50, 89, 40, 4.5);
+  return (
+    <g>
+      {/* bellhop cart: arched rail over a carpeted deck */}
+      {pen.bar(poly([[14, 72], [14, 20], ...arcPts(50, 20, 36, 12, 180, 360, 14).slice(1, -1), [86, 20], [86, 72]], false), 3.4, frame, { main: true })}
+      {pen.bar(seg(14, 32, 86, 32), 2.2, frame)}
+      {/* luggage */}
+      {pen.body(rr(20, 42, 36, 30, 3), 'leather', { fill: pen.tint(0), sw: 0.9 })}
+      {pen.accent(seg(30, 42, 30, 72), { fill: false, sw: 2 })}
+      {pen.accent(seg(46, 42, 46, 72), { fill: false, sw: 2 })}
+      {pen.bar(poly([[32, 42], [32, 38], [44, 38], [44, 42]], false), 2, 'leather')}
+      {cyl(pen, 68, 52, 13, 4, 18, 'fabric', { fill: pen.tint(1), tex: false })}
+      {pen.body(rr(56, 34, 22, 14, 3), 'leather', { fill: pen.tint(3), sw: 0.8 })}
+      {pen.accent(rect(64, 31, 6, 3, 1))}
+      {box(pen, 8, 68, 84, 14, 6, 'fabric', { r: 1.5, taper: 2, fill: pen.style === 'blueprint' ? undefined : pen.style === 'neon' ? undefined : pen.tint(pen.style === 'ink' ? 0 : 5), tex: false })}
+      {pen.accent(rect(8, 76, 84, 3, 1))}
+      {wheel(pen, 18, 84, 5)}
+      {wheel(pen, 82, 84, 5)}
+    </g>
+  );
+}
+
+/** Cotton Candy Pier: candy-floss cart under a striped parasol. */
+function FlossCart(pen: Pen): JSX.Element {
+  pen.ground(50, 89, 38, 4.5);
+  const wedgePts = (i: number, n: number): Pt[] => {
+    const a0 = 180 + (180 / n) * i;
+    const a1 = 180 + (180 / n) * (i + 1);
+    return [[50, 6], ...arcPts(50, 28, 40, 9, a0, a1, 4).map(([x, y]) => [x, y + 0] as Pt)];
+  };
+  const n = 8;
+  return (
+    <g>
+      {pen.bar(seg(50, 6, 50, 52), 2.6, 'metal')}
+      {Array.from({ length: n }, (_, i) => (
+        <g key={i}>{pen.body(poly(wedgePts(i, n)), 'fabric', { fill: i % 2 ? '#ffffff' : pen.p.accent, tex: false, sw: 0.8, main: i === 0 })}</g>
+      ))}
+      {pen.body(poly(arcPts(50, 28, 40, 9, 0, 180, 16)), 'fabric', { fill: pen.p.accent, tex: false, sw: 0.8 })}
+      {[[30, 48, 8], [42, 44, 7], [70, 47, 8]].map(([x, y, r], i) => (
+        <g key={i}>
+          {pen.bar(seg(x, y, x, 56), 1.6, 'paper')}
+          {pen.body(ngon(x, y, r, 7, i * 20, r * 0.8), 'fabric', { fill: i === 1 ? pen.tint(1) : pen.tint(4), tex: false, sw: 0.8 })}
+        </g>
+      ))}
+      {box(pen, 14, 52, 72, 30, 8, 'wood', { r: 3, taper: 2 })}
+      {pen.text(50, 70, 'FLOSS', 8, { color: pen.p.accent })}
+      {wheel(pen, 24, 83, 6)}
+      {wheel(pen, 76, 83, 6)}
+    </g>
+  );
+}
+

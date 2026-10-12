@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
 import clsx from 'clsx';
-import { ChevronLeft, Lightbulb, Redo2, Settings2, Undo2 } from 'lucide-react';
+import { ChevronLeft, Lightbulb, Redo2, Settings2, Tag, Undo2 } from 'lucide-react';
 import { Stamp } from '@/components/fx';
 import { toast } from '@/components/ui/Toast';
 import {
@@ -23,6 +23,7 @@ import {
 import type { Cell, PlayMode, Puzzle } from '@/grid/types';
 import { ambience, codeFor, killersOf, play, playSuccess, playWrong, victimsOf } from './bridge';
 import { BurnOverlay, type BurnAction } from './BurnOverlay';
+import { sameLink, type ClueLink } from './clueLinks';
 import { Dossier, TestimonySlip } from './Dossier';
 import { Instruments } from './Instruments';
 import { LineUp } from './LineUp';
@@ -180,6 +181,15 @@ export function CasePlayer(props: CasePlayerProps) {
   const [confirm, setConfirm] = useState<null | 'lever' | 'reveal'>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [resultsHidden, setResultsHidden] = useState(false);
+  // clue ↔ board linking: hovered chip (transient) and tapped chip (sticky until tapped again)
+  const [linkHover, setLinkHover] = useState<ClueLink | null>(null);
+  const [linkLock, setLinkLock] = useState<ClueLink | null>(null);
+  useEffect(() => {
+    setLinkHover(null);
+    setLinkLock(null);
+  }, [selectedId, puzzle.id]);
+  const activeLink = linkHover ?? linkLock;
+  const onLinkTap = useCallback((l: ClueLink) => setLinkLock((cur) => (sameLink(cur, l) ? null : l)), []);
   // the plan chars on the Board first, then the full-screen burn takes over
   const [burnShown, setBurnShown] = useState(false);
   useEffect(() => {
@@ -294,7 +304,7 @@ export function CasePlayer(props: CasePlayerProps) {
     toast(msg, 'warn', { duration: 1800 });
   };
 
-  const actOnCell = (cell: Cell, opts: { all?: boolean; tool?: DeskTool } = {}) => {
+  const actOnCell = (cell: Cell, opts: { all?: boolean; tool?: DeskTool; fromBoard?: boolean } = {}) => {
     if (!editable || replay) return;
     const res = store().tap(puzzle, cell, opts);
     switch (res) {
@@ -315,7 +325,8 @@ export function CasePlayer(props: CasePlayerProps) {
         play('erase');
         break;
       case 'blocked':
-        warn('Blocking furniture — nobody can stand there.');
+        // a board tap already shows the piece's name tag ("Barrel · blocks the square")
+        if (!opts.fromBoard) warn('Blocking furniture — nobody can stand there.');
         break;
       case 'need-select':
         warn('Pick a suspect from the dossier first.');
@@ -326,7 +337,7 @@ export function CasePlayer(props: CasePlayerProps) {
   };
 
   const onCellTap = (cell: Cell) => {
-    actOnCell(cell);
+    actOnCell(cell, { fromBoard: true });
   };
   const onCellLongPress = (cell: Cell) => {
     if (!editable) return;
@@ -566,6 +577,9 @@ export function CasePlayer(props: CasePlayerProps) {
           violations={zenViolations.length ? zenViolations : undefined}
           accusationLines={replay ? undefined : accusationLines}
           lampFollow={settings.lampFollow}
+          furnitureLabels={settings.furnitureLabels}
+          highlightFurniture={!replay && activeLink?.type === 'furniture' ? activeLink.kind : null}
+          highlightRoomId={!replay && activeLink?.type === 'room' ? activeLink.roomId : null}
           burn={phase === 'burned'}
           onCellTap={onCellTap}
           onCellLongPress={onCellLongPress}
@@ -593,6 +607,10 @@ export function CasePlayer(props: CasePlayerProps) {
       ticks={desk?.ticks ?? []}
       onToggleTick={(i) => store().toggleTick(i)}
       onScenario={() => setScenarioOpen(true)}
+      activeLink={activeLink}
+      lockedLink={linkLock}
+      onLinkHover={setLinkHover}
+      onLinkTap={onLinkTap}
     />
   );
 
@@ -701,6 +719,8 @@ export function CasePlayer(props: CasePlayerProps) {
     onLever: askLever,
     crossesAll,
     onToggleCrossesAll: () => setCrossesAll((v) => !v),
+    furnitureLabels: settings.furnitureLabels,
+    onToggleFurnitureLabels: () => store().setSetting('furnitureLabels', !store().settings.furnitureLabels),
   };
 
   const overlays = (
@@ -810,6 +830,13 @@ export function CasePlayer(props: CasePlayerProps) {
         <div className="flex items-center gap-1 px-2 pb-1">
           {scenarioChip}
           <div className="flex-1" />
+          <IconMini
+            label={settings.furnitureLabels ? 'Hide furniture name labels' : 'Show furniture name labels'}
+            onClick={instrumentsProps.onToggleFurnitureLabels}
+            pressed={settings.furnitureLabels}
+          >
+            <Tag className="size-[18px]" />
+          </IconMini>
           <IconMini label="Undo" onClick={() => store().undo()} disabled={!editable || !desk?.undo.length}>
             <Undo2 className="size-[18px]" />
           </IconMini>
@@ -845,15 +872,32 @@ export function CasePlayer(props: CasePlayerProps) {
   );
 }
 
-function IconMini({ label, onClick, disabled, children }: { label: string; onClick: () => void; disabled?: boolean; children: ReactNode }) {
+function IconMini({
+  label,
+  onClick,
+  disabled,
+  pressed,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  /** toggle buttons: shown lit + aria-pressed */
+  pressed?: boolean;
+  children: ReactNode;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
+      aria-pressed={pressed}
       title={label}
-      className="grid size-9 place-items-center rounded-full text-[var(--fp-muted)] hover:bg-[var(--dk-hover,rgb(255_255_255/0.08))] hover:text-[var(--fp-ink)] disabled:opacity-35 focus-visible:outline-2 focus-visible:outline-[var(--fp-accent2)]"
+      className={clsx(
+        'grid size-9 place-items-center rounded-full hover:bg-[var(--dk-hover,rgb(255_255_255/0.08))] hover:text-[var(--fp-ink)] disabled:opacity-35 focus-visible:outline-2 focus-visible:outline-[var(--fp-accent2)]',
+        pressed ? 'bg-[color-mix(in_srgb,var(--fp-accent)_22%,transparent)] text-[var(--fp-ink)] shadow-[inset_0_0_0_1px_var(--fp-accent)]' : 'text-[var(--fp-muted)]',
+      )}
     >
       {children}
     </button>
@@ -886,6 +930,7 @@ function TiltPlan({ children, disabled }: { children: ReactNode; disabled?: bool
 const SETTING_ROWS: { key: keyof FloorplanSettings; label: string; hint: string }[] = [
   { key: 'autoCross', label: 'Auto-cross', hint: 'Pinning someone crosses their row and column for everyone else.' },
   { key: 'confirmLever', label: 'Confirm the lever', hint: 'Ask before closing the case.' },
+  { key: 'furnitureLabels', label: 'Name labels', hint: 'Tiny captions under every piece of furniture (zoom in on big plans).' },
   { key: 'showTimer', label: 'Show the timer', hint: 'Hide it if the clock makes you nervous.' },
   { key: 'lampFollow', label: 'Lamp follows the cursor', hint: 'Desk lamp light and plan tilt follow your mouse.' },
   { key: 'sound', label: 'Sound effects', hint: 'Pins, pencils, stamps and fire.' },

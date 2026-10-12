@@ -2,11 +2,13 @@
  * The Dossier: suspect polaroids (vertical rail on desktop, film strip on phones) and the
  * sliding testimony slip with a tick-box per sentence. The victim slip states the scenario rule.
  */
-import type { CSSProperties } from 'react';
+import { Fragment, useMemo, type CSSProperties } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import clsx from 'clsx';
 import { Check, Info } from 'lucide-react';
+import { furnitureName } from '@/grid/board/FurnitureTag';
 import type { Cell, Person, Puzzle, Variant } from '@/grid/types';
+import { linkClueText, linkLabel, sameLink, type ClueLink } from './clueLinks';
 import { Polaroid, VariantIcon, useDeskMood } from './parts';
 import { VARIANT_META } from './util';
 
@@ -119,11 +121,79 @@ export interface SlipProps {
   ticks: number[];
   onToggleTick: (clueIndex: number) => void;
   onScenario: () => void;
+  /** Clue ↔ board linking: the link currently lit on the plan (hover or tapped). */
+  activeLink?: ClueLink | null;
+  /** The tapped (sticky) link, shown pressed. */
+  lockedLink?: ClueLink | null;
+  onLinkHover?: (link: ClueLink | null) => void;
+  onLinkTap?: (link: ClueLink) => void;
   className?: string;
 }
 
+/** A clue sentence with furniture nouns and room names as chips that light up the plan. */
+function ClueText({
+  text,
+  puzzle,
+  activeLink,
+  lockedLink,
+  onLinkHover,
+  onLinkTap,
+}: {
+  text: string;
+  puzzle: Puzzle;
+  activeLink?: ClueLink | null;
+  lockedLink?: ClueLink | null;
+  onLinkHover?: (link: ClueLink | null) => void;
+  onLinkTap?: (link: ClueLink) => void;
+}) {
+  const segs = useMemo(() => (onLinkHover || onLinkTap ? linkClueText(text, puzzle) : [{ text }]), [text, puzzle, onLinkHover, onLinkTap]);
+  return (
+    <>
+      {segs.map((s, i) => {
+        const link = s.link;
+        if (!link) return <Fragment key={i}>{s.text}</Fragment>;
+        const lit = sameLink(link, activeLink);
+        const pressed = sameLink(link, lockedLink);
+        const label = linkLabel(link, puzzle);
+        return (
+          <button
+            key={i}
+            type="button"
+            aria-pressed={pressed}
+            aria-label={`${s.text}: ${link.type === 'room' ? `show the ${label} on the plan` : `show every ${furnitureName(link.kind).toLowerCase()} on the plan`}`}
+            title={`Show the ${label} on the plan`}
+            onPointerEnter={(e) => {
+              if (e.pointerType === 'mouse') onLinkHover?.(link);
+            }}
+            onPointerLeave={(e) => {
+              if (e.pointerType === 'mouse') onLinkHover?.(null);
+            }}
+            onFocus={() => onLinkHover?.(link)}
+            onBlur={() => onLinkHover?.(null)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onLinkTap?.(link);
+            }}
+            className={clsx(
+              'inline rounded-[3px] px-[2px] font-mono text-[13px] leading-[1.45] underline decoration-dotted decoration-[1.5px] underline-offset-[3px] transition-colors',
+              'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--sl-accent)]',
+              link.type === 'room' ? 'decoration-[var(--sl-muted)]' : 'decoration-[var(--sl-box)]',
+              lit
+                ? 'bg-[color-mix(in_srgb,var(--sl-accent)_18%,transparent)] decoration-[var(--sl-accent)]'
+                : 'hover:bg-[color-mix(in_srgb,var(--sl-box)_14%,transparent)]',
+            )}
+            style={{ color: 'inherit', textDecorationLine: 'underline' }}
+          >
+            {s.text}
+          </button>
+        );
+      })}
+    </>
+  );
+}
+
 /** Paper slip with the selected person's sentences (typewriter face, tick-box per line). */
-export function TestimonySlip({ puzzle, personId, ticks, onToggleTick, onScenario, className }: SlipProps) {
+export function TestimonySlip({ puzzle, personId, ticks, onToggleTick, onScenario, activeLink, lockedLink, onLinkHover, onLinkTap, className }: SlipProps) {
   const person = puzzle.people.find((p) => p.id === personId) ?? null;
   const variant: Variant = puzzle.variant ?? 'classic';
   const lines = puzzle.clues.map((c, i) => ({ ...c, i })).filter((c) => c.personId === personId);
@@ -168,26 +238,27 @@ export function TestimonySlip({ puzzle, personId, ticks, onToggleTick, onScenari
               {lines.map((l) => {
                 const done = ticks.includes(l.i);
                 return (
-                  <li key={l.i}>
+                  <li key={l.i} className="group flex w-full items-start gap-2 rounded-[3px] px-0.5 py-0.5 text-left">
                     <button
                       type="button"
                       role="checkbox"
                       aria-checked={done}
+                      aria-label={l.text}
                       onClick={() => onToggleTick(l.i)}
-                      className="group flex w-full items-start gap-2 rounded-[3px] px-0.5 py-0.5 text-left focus-visible:outline-2 focus-visible:outline-[var(--sl-accent)]"
+                      className={clsx(
+                        'mt-[3px] grid size-[15px] shrink-0 place-items-center rounded-[2px] border-[1.5px] border-[var(--sl-box)] transition-colors',
+                        'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sl-accent)]',
+                        done ? 'bg-[var(--sl-box)] text-[var(--sl-on-ink)]' : 'group-hover:bg-[color-mix(in_srgb,var(--sl-box)_12%,transparent)]',
+                      )}
                     >
-                      <span
-                        className={clsx(
-                          'mt-[3px] grid size-[15px] shrink-0 place-items-center rounded-[2px] border-[1.5px] border-[var(--sl-box)] transition-colors',
-                          done ? 'bg-[var(--sl-box)] text-[var(--sl-on-ink)]' : 'group-hover:bg-[color-mix(in_srgb,var(--sl-box)_12%,transparent)]',
-                        )}
-                      >
-                        {done && <Check className="size-3" strokeWidth={3.5} />}
-                      </span>
-                      <span className={clsx('font-mono text-[13px] leading-[1.45]', done && 'text-[var(--sl-muted)] line-through decoration-[var(--sl-accent)]')}>
-                        {l.text}
-                      </span>
+                      {done && <Check className="size-3" strokeWidth={3.5} />}
                     </button>
+                    <span
+                      onClick={() => onToggleTick(l.i)}
+                      className={clsx('cursor-pointer font-mono text-[13px] leading-[1.45]', done && 'text-[var(--sl-muted)] line-through decoration-[var(--sl-accent)]')}
+                    >
+                      <ClueText text={l.text} puzzle={puzzle} activeLink={activeLink} lockedLink={lockedLink} onLinkHover={onLinkHover} onLinkTap={onLinkTap} />
+                    </span>
                   </li>
                 );
               })}

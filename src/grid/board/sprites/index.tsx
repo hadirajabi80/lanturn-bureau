@@ -1,23 +1,26 @@
 /**
- * Furniture sprites - top-down architectural-plan furniture, restyled per district.
+ * Furniture sprites - three-quarter view furniture props (seen from the front and a little
+ * above, standing on the floor), restyled per district.
  *
  *   FurnitureSprite({ piece, cellSize, skin?, glowFilterId? })   positioned on the board grid
  *   SPRITES[kind]({ w, h, style, palette, seed?, glowId? })      raw drawing in a w x h box (100 = one cell)
- *   furnitureTitle(kind)                                          "Armchair", "Bananas"...
+ *   furnitureTitle(kind) / FURNITURE_NAMES                        "Armchair", "Bananas crate", "Floor lamp"...
  *   SpriteGallery                                                 dev: every kind x every style
  *
- * Layout: core/ (geometry + Pen), styles/ (one StyleDef per WallStyle), kinds/ (one file per family).
+ * Layout: core/ (geometry, Pen, 3/4-view kit), styles/ (one StyleDef per WallStyle), kinds/ (one file per family).
  */
 import { memo, type JSX } from 'react';
-import { FURNITURE_LABEL, type Furniture, type FurnitureKind } from '../../types';
+import type { Furniture, FurnitureKind } from '../../types';
 import { hash } from './core/geom';
 import { KINDS, KIND_ORDER } from './kinds';
+import { FURNITURE_NAMES } from './names';
 import { drawSprite, skinFor, type SpriteProps } from './render';
 
 export { INK } from './common';
 export { STYLE_DEFS, WALL_STYLES } from './styles';
 export type { Material, StyleDef } from './styles';
 export { KINDS, KIND_ORDER } from './kinds';
+export { FURNITURE_NAMES } from './names';
 export { drawSprite, skinFor } from './render';
 export type { SpriteProps } from './render';
 export { SpriteGallery } from './SpriteGallery';
@@ -27,11 +30,9 @@ export const SPRITES = Object.fromEntries(
   KIND_ORDER.map((k) => [k, (p: SpriteProps): JSX.Element => drawSprite(k, p)]),
 ) as Record<FurnitureKind, (p: SpriteProps) => JSX.Element>;
 
-/** Display name of a kind ("Armchair", "Bananas"). */
+/** Display name of a kind ("Armchair", "Bananas crate", "Floor lamp"). */
 export function furnitureTitle(kind: FurnitureKind): string {
-  const a = FURNITURE_LABEL[kind]?.a ?? kind;
-  const noun = a.replace(/^(an?|some)\s+/i, '');
-  return noun.charAt(0).toUpperCase() + noun.slice(1);
+  return FURNITURE_NAMES[kind] ?? kind.charAt(0).toUpperCase() + kind.slice(1);
 }
 
 export interface FurnitureSpriteProps {

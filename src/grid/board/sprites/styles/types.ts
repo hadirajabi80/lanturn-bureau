@@ -72,6 +72,8 @@ export interface StyleDef {
   trim?(open: boolean, p: SkinPalette): { kind: 'scallop' | 'frill'; size: number; color: string } | null;
   /** outline colour for a part whose fill was overridden (light styles: a darker shade of that fill). */
   edge?(fill: string): string;
+  /** light on upward-facing surfaces (default white at 16%); null = none. */
+  light?(p: SkinPalette): { color: string; opacity: number } | null;
   /** glossy highlight. */
   glint(p: SkinPalette): LineLook | null;
   glass(p: SkinPalette): { fill: string; opacity: number; streak: string; streakOpacity: number };

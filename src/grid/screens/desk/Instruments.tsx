@@ -5,7 +5,7 @@
 import { useState, type ReactNode } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import clsx from 'clsx';
-import { Eraser, Eye, Lightbulb, MapPin, MessageCircleQuestion, Pencil, PenLine, Redo2, Stamp, Undo2 } from 'lucide-react';
+import { Eraser, Eye, Lightbulb, MapPin, MessageCircleQuestion, Pencil, PenLine, Redo2, Stamp, Tag, Undo2 } from 'lucide-react';
 import type { DeskTool } from '@/grid/store';
 import { MonoClock, useDeskMood } from './parts';
 
@@ -38,6 +38,9 @@ export interface InstrumentsProps {
   onLever: () => void;
   crossesAll: boolean;
   onToggleCrossesAll: () => void;
+  /** "Name labels": tiny captions under every piece of furniture */
+  furnitureLabels?: boolean;
+  onToggleFurnitureLabels?: () => void;
 }
 
 function ToolButton({
@@ -302,6 +305,20 @@ export function Instruments(props: InstrumentsProps & { layout: 'column' | 'dock
       >
         <Eye className="size-3.5" /> Crosses: {props.crossesAll ? 'everyone' : 'selected only'}
       </button>
+      {props.onToggleFurnitureLabels && (
+        <button
+          type="button"
+          onClick={props.onToggleFurnitureLabels}
+          aria-pressed={!!props.furnitureLabels}
+          title="Show the name of every piece of furniture on the plan"
+          className={clsx(
+            '-mt-2 flex items-center gap-2 rounded-[8px] px-3 py-1.5 text-left text-[11px] hover:text-[var(--fp-ink)] focus-visible:outline-2 focus-visible:outline-[var(--fp-accent2)]',
+            props.furnitureLabels ? 'text-[var(--fp-ink)]' : 'text-[var(--fp-muted)]',
+          )}
+        >
+          <Tag className="size-3.5" /> Name labels: {props.furnitureLabels ? 'on' : 'off'}
+        </button>
+      )}
       <div className="h-px bg-[var(--fp-hair)]" />
       <div className="space-y-1">
         <ToolButton disabled={disabled || props.ottoLeft === 0} onClick={props.onOtto} label={`Ask Otto${props.ottoLeft != null ? ` · ${props.ottoLeft} left` : props.ottoCount ? ` · ${props.ottoCount}` : ''}`} title="Ask Otto for the next deduction" kbd="O">

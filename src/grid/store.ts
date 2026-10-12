@@ -110,6 +110,8 @@ export interface FloorplanSettings {
   lampFollow: boolean;
   showTimer: boolean;
   confirmLever: boolean;
+  /** tiny name captions under every piece of furniture on the plan */
+  furnitureLabels: boolean;
 }
 
 export interface ModeRecords {
@@ -331,6 +333,7 @@ const DEFAULT_SETTINGS: FloorplanSettings = {
   lampFollow: true,
   showTimer: true,
   confirmLever: true,
+  furnitureLabels: false,
 };
 
 const DEFAULT_RECORDS: ModeRecords = {

@@ -1,5 +1,6 @@
 import type { JSX } from 'react';
-import { ell, inset, leaf, ngon, poly, rect, seg, type Pt, type Shape } from '../core/geom';
+import { ell, inset, leaf, poly, rect, rr, seg, smooth, topFace, type Pt, type Shape } from '../core/geom';
+import { box, leg, strut } from '../core/kit';
 import type { Pen } from '../core/pen';
 import { bubbles, flower } from './ornaments';
 import { fan } from './seating';
@@ -8,39 +9,62 @@ import { fan } from './seating';
 const O = { open: true } as const;
 const M = { open: true, main: true } as const;
 
-export function Rug(pen: Pen, L: number): JSX.Element {
+// ───────────── rug ─────────────
+
+export function Rug(pen: Pen, w: number, h: number): JSX.Element {
+  const tall = h > w;
+  const x0 = tall ? 12 : 9;
+  const x1 = w - x0;
+  const y0 = tall ? 12 : 18;
+  const y1 = h - (tall ? 14 : 16);
+  const tp = tall ? 3 : 5;
+  const shape = topFace(x0, y0, x1 - x0, y1 - y0, tp);
+  // fringe on the short ends
   const fr: [Pt, Pt][] = [];
-  for (let y = 16; y <= 84; y += 6) {
-    fr.push([[10, y], [4, y]]);
-    fr.push([[L - 10, y], [L - 4, y]]);
+  if (tall) {
+    for (let x = x0 + tp + 3; x <= x1 - tp - 2; x += 5) fr.push([[x, y0], [x, y0 - 5]]);
+    for (let x = x0 + 3; x <= x1 - 2; x += 5) fr.push([[x, y1 + 2], [x, y1 + 8]]);
+  } else {
+    for (let k = 0; k <= 10; k++) {
+      const t = k / 10;
+      const yy = y0 + 3 + (y1 - y0 - 4) * t;
+      const xl = x0 + tp * (1 - t) - 1;
+      const xr = x1 - tp * (1 - t) + 1;
+      fr.push([[xl, yy], [xl - 6, yy + 0.5]]);
+      fr.push([[xr, yy], [xr + 6, yy + 0.5]]);
+    }
   }
-  const cx = L / 2;
-  const rx = Math.min(L * 0.2, 34);
+  const cx = w / 2;
+  const cy = (y0 + y1) / 2;
+  const rx = tall ? 22 : Math.min(w * 0.2, 32);
+  const ry = tall ? Math.min(h * 0.2, 34) : 15;
   const floral = pen.style === 'ribbon' || pen.style === 'lace';
   const med: Shape =
     pen.style === 'deco' || pen.style === 'neon'
-      ? poly([[cx - rx, 50], [cx, 28], [cx + rx, 50], [cx, 72]])
-      : ell(cx, 50, rx, 18);
+      ? poly([[cx - rx, cy], [cx, cy - ry], [cx + rx, cy], [cx, cy + ry]])
+      : ell(cx, cy, rx, ry);
   return (
     <g>
-      {pen.lines(fr, { fine: true })}
-      {pen.body(rect(10, 10, L - 20, 80, 3), 'fabric', { ...M, fill: pen.tint(0), alpha: 0.85, tex: pen.style !== 'lace' })}
-      {pen.line(rect(17, 17, L - 34, 66, 2), { fine: true })}
-      {pen.line(rect(21, 21, L - 42, 58, 1), { fine: true, dash: '1.5 3' })}
-      {floral ? floralField(pen, L) : pen.line(med, { fine: true })}
-      {!floral && pen.line(inset(med, 7), { fine: true, dash: '2 2.5' })}
-      {pen.style === 'deco' && pen.lines(fan(cx, 50, 16, 5), { fine: true })}
+      {pen.lines(fr, { fine: true, sw: 1.2, opacity: 0.8 })}
+      {pen.body(rect(x0, y1 - 1, x1 - x0, 4, 1), 'fabric', { ...O, fill: pen.tint(0), tex: false })}
+      {pen.body(shape, 'fabric', { ...M, fill: pen.tint(0), alpha: 0.9, tex: pen.style !== 'lace' })}
+      {pen.line(inset(shape, 6), { sw: 1.4 })}
+      {pen.line(inset(shape, 10), { fine: true, dash: '1.5 3' })}
+      {floral ? floralField(pen, cx, cy, tall, w) : pen.body(med, 'fabric', { ...O, fill: pen.tint(2), tex: false })}
+      {!floral && pen.line(inset(med, 5), { fine: true, dash: '2 2.5' })}
+      {!floral && pen.body(inset(med, Math.min(rx, ry) * 0.62), 'fabric', { ...O, fill: pen.tint(4), tex: false })}
+      {pen.style === 'deco' && pen.lines(fan(cx, cy, 12, 5), { fine: true })}
     </g>
   );
 }
 
 /** Rosewater / boutique rug: a little garden of blossoms and leaves. */
-function floralField(pen: Pen, L: number): JSX.Element {
-  const cx = L / 2;
-  const spots: [number, number, number][] =
-    L >= 200
-      ? [[cx, 50, 10], [cx - 52, 33, 7], [cx + 52, 67, 7], [cx - 50, 68, 6], [cx + 50, 32, 6], [cx - 24, 30, 4.5], [cx + 26, 70, 4.5]]
-      : [[50, 50, 10], [30, 32, 5], [70, 68, 5], [30, 68, 4.5], [70, 32, 4.5]];
+function floralField(pen: Pen, cx: number, cy: number, tall: boolean, w: number): JSX.Element {
+  const spots: [number, number, number][] = tall
+    ? [[cx, cy, 10], [cx - 18, cy - 50, 7], [cx + 18, cy + 50, 7], [cx + 16, cy - 40, 5], [cx - 16, cy + 40, 5]]
+    : w >= 200
+      ? [[cx, cy, 10], [cx - 52, cy - 10, 7], [cx + 52, cy + 10, 7], [cx - 30, cy + 12, 5], [cx + 30, cy - 12, 5]]
+      : [[cx, cy, 9], [cx - 25, cy, 5.5], [cx + 25, cy, 5.5]];
   return (
     <g>
       {spots.map(([x, y, r], i) => (
@@ -49,108 +73,237 @@ function floralField(pen: Pen, L: number): JSX.Element {
           {pen.body(leaf(x, y, r * 1.7, r * 0.8, 200 + i * 70), 'leaf', { tex: false })}
         </g>
       ))}
-      {spots.map(([x, y, r], i) => flower(pen, x, y, r, pen.tint(i % 2 ? 3 : 0 + i), `f${i}`))}
+      {spots.map(([x, y, r], i) => flower(pen, x, y, r, pen.tint(i % 2 ? 3 : i), `f${i}`))}
     </g>
   );
 }
 
-export function Bed(pen: Pen, L: number): JSX.Element {
-  const dbl = L >= 200;
-  const x0 = dbl ? 64 : 44;
-  const wood = pen.style === 'steel' ? 'darkwood' : 'wood';
+// ───────────── bed ─────────────
+
+export function Bed(pen: Pen, w: number, h: number): JSX.Element {
+  return w > h ? BedSide(pen, w) : BedFront(pen, h);
+}
+
+function bedWood(pen: Pen) {
+  return pen.style === 'steel' || pen.style === 'deco' ? ('darkwood' as const) : ('wood' as const);
+}
+
+function blanketFill(pen: Pen): string | undefined {
+  return pen.style === 'blueprint' ? undefined : pen.tint(pen.style === 'deco' ? 1 : 0);
+}
+
+/** Bed seen from its foot end: headboard at the back, blanket towards us, footboard in front. */
+function BedFront(pen: Pen, h: number): JSX.Element {
+  const wood = bedWood(pen);
+  const yb = h >= 200 ? 84 : 52;
+  const front = h - 26;
+  pen.ground(50, h - 9, 46, 6);
   return (
     <g>
-      {/* headboard + frame */}
-      {pen.body(rect(4, 6, 12, 88, 4), wood, O)}
-      {pen.style === 'deco' && pen.lines([[[10, 14], [10, 86]]], { fine: true })}
-      {pen.body(rect(12, 8, L - 18, 84, 6), wood, O)}
+      {/* headboard */}
+      {pen.body(rr(8, 4, 84, 40, 16, 16, 2, 2), wood, O)}
+      {pen.line(rr(15, 10, 70, 28, 11, 11, 1, 1), { fine: true })}
+      {pen.style === 'deco' && pen.lines(fan(50, 38, 22, 7), { fine: true })}
+      {pen.style === 'lace' && pen.body(ell(50, 14, 9, 6), 'brass', { ...O, tex: false })}
       {/* mattress */}
-      {pen.body(rect(15, 11, L - 24, 78, 5), 'linen', M)}
-      {/* pillows */}
-      {dbl ? (
+      {pen.body(rect(12, 28, 76, front - 28), 'linen', M)}
+      {pen.lit(rect(13, 29, 74, front - 30))}
+      {/* pillow(s) */}
+      {h >= 200 ? (
         <g>
-          {pen.body(rect(20, 15, 32, 33, 9), 'linen', O)}
-          {pen.body(rect(20, 52, 32, 33, 9), 'linen', O)}
+          {pen.body(rr(16, 30, 33, 22, 9), 'linen', O)}
+          {pen.body(rr(51, 30, 33, 22, 9), 'linen', O)}
         </g>
       ) : (
-        pen.body(rect(18, 20, 22, 60, 8), 'linen', O)
+        pen.body(rr(22, 30, 56, 17, 8), 'linen', O)
       )}
-      {/* blanket with turned-down sheet */}
-      {pen.body(rect(x0, 11, L - 9 - x0, 78, 4), 'fabric', { ...O, fill: pen.style === 'blueprint' ? undefined : pen.tint(pen.style === 'deco' ? 1 : 0), alpha: 0.9 })}
-      {pen.body(rect(x0, 11, 11, 78, 2), 'linen', O)}
-      {pen.line(seg(x0 + 20, 16, x0 + 20, 84), { fine: true, dash: '2 3' })}
-      {pen.line(seg(L - 18, 16, L - 18, 84), { fine: true, dash: '2 3' })}
+      {/* blanket with a turned-down sheet, hanging over the front */}
+      {pen.body(rect(10, yb, 80, front - yb + 12, 3), 'fabric', { ...O, fill: blanketFill(pen) })}
+      {pen.body(rect(10, yb, 80, 8, 2), 'linen', O)}
+      {pen.line(seg(14, front + 1, 86, front + 1), { fine: true, dash: '2 2' })}
+      {h >= 200 && pen.lines([[[30, yb + 22], [70, yb + 22]], [[30, yb + 50], [70, yb + 50]]], { fine: true, dash: '2 3' })}
+      {/* footboard */}
+      {pen.body(rr(6, front + 4, 88, 12, 3), wood, O)}
+      {leg(pen, 10, front - 2, h - 8, 6, wood, O)}
+      {leg(pen, 90, front - 2, h - 8, 6, wood, O)}
+      {pen.body(ell(10, front - 3, 4.5, 2.6), wood, { ...O, tex: false })}
+      {pen.body(ell(90, front - 3, 4.5, 2.6), wood, { ...O, tex: false })}
     </g>
   );
 }
 
-export function Bathtub(pen: Pen, L: number): JSX.Element {
-  const big = L >= 200;
-  const outer = big ? rect(6, 12, L - 12, 76, 30) : rect(8, 12, 84, 76, 26);
-  const inner = big ? rect(15, 21, L - 32, 58, 24) : rect(16, 20, 64, 60, 20);
-  const tx = big ? L - 14 : 86;
+/** Bed along a horizontal footprint, seen side-on: headboard left, footboard right. */
+function BedSide(pen: Pen, w: number): JSX.Element {
+  const wood = bedWood(pen);
+  const xb = Math.max(64, w * 0.38);
+  pen.ground(w / 2, 89, w / 2 - 6, 5);
+  return (
+    <g>
+      {/* headboard */}
+      {pen.body(rr(6, 6, 24, 82, 10, 10, 2, 2), wood, O)}
+      {pen.line(rr(11, 12, 14, 66, 6, 6, 1, 1), { fine: true })}
+      {pen.style === 'deco' && pen.lines([[[18, 16], [18, 74]]], { fine: true })}
+      {/* mattress: top and side */}
+      {box(pen, 24, 30, w - 40, 46, 30, 'linen', { ...M, r: 3 })}
+      {/* pillow */}
+      {pen.body(rr(30, 26, 30, 26, 11), 'linen', O)}
+      {pen.lit(rr(32, 28, 20, 10, 5))}
+      {/* blanket */}
+      {pen.body(rr(xb, 30, w - 16 - xb, 30, 3), 'fabric', { ...O, fill: blanketFill(pen) })}
+      {pen.body(rr(xb, 60, w - 16 - xb, 20, 3), 'fabric', { ...O, fill: blanketFill(pen) })}
+      {pen.shade(rect(xb + 1, 61, w - 18 - xb, 18), 0.35)}
+      {pen.body(rect(xb, 30, 9, 50, 2), 'linen', O)}
+      {/* low footboard */}
+      {pen.body(rr(w - 20, 36, 14, 52, 6, 6, 2, 2), wood, O)}
+      {leg(pen, 28, 74, 89, 6, wood, O)}
+    </g>
+  );
+}
+
+// ───────────── bathtub ─────────────
+
+export function Bathtub(pen: Pen, w: number, h: number): JSX.Element {
+  if (h > w) return TubLong(pen, h);
   const sweet = pen.style === 'ribbon' || pen.style === 'lace' || pen.style === 'candy';
-  if (sweet) {
-    // clawfoot tub with foam bubbles
-    const x0 = big ? 12 : 12;
-    const x1 = big ? L - 12 : 88;
-    const feet: Pt[] = [[x0 + 8, 20], [x1 - 8, 20], [x0 + 8, 80], [x1 - 8, 80]];
-    const bub: [number, number, number][] = big
-      ? [[60, 40, 6], [70, 52, 4.5], [86, 44, 5], [104, 58, 6.5], [118, 42, 4], [96, 62, 3.5], [130, 56, 5], [76, 64, 3.2]]
-      : [[40, 42, 5.5], [52, 54, 4], [62, 42, 3.5], [36, 58, 3.5], [58, 64, 4.5]];
-    return (
-      <g>
-        {feet.map(([x, y], i) => (
-          <g key={i}>{pen.accent(leaf(x, y, 10, 7, [225, 315, 135, 45][i]))}</g>
-        ))}
-        {pen.body(rect(x0, 16, x1 - x0, 68, 34), 'ceramic', M)}
-        {pen.body(rect(x0 + 8, 24, x1 - x0 - 16, 52, 26), 'water', { open: true, alpha: 0.9 })}
-        {bubbles(pen, bub)}
-        {pen.accent(rect(x1 - 12, 46, 8, 8, 2))}
-        {pen.stud(x1 - 8, 39, 2.6)}
-        {pen.stud(x1 - 8, 61, 2.6)}
-      </g>
-    );
-  }
+  const x0 = 8;
+  const x1 = w - 8;
+  const top = 32;
+  const body = smooth([
+    [x0, top], [x1, top], [x1 - 3, top + 22], [x1 - 16, top + 44], [w / 2, top + 48], [x0 + 16, top + 44], [x0 + 3, top + 22],
+  ], true, 5);
+  const feet: number[] = [x0 + 18, x1 - 18];
+  const bub: [number, number, number][] = w >= 200
+    ? [[50, 30, 6], [62, 26, 4.5], [86, 28, 5], [110, 25, 6.5], [128, 29, 4], [96, 22, 3.5], [140, 26, 5]]
+    : [[34, 30, 5.5], [46, 25, 4], [58, 29, 4.5], [68, 26, 3.5]];
+  pen.ground(w / 2, 89, w / 2 - 14, 5);
   return (
     <g>
-      {pen.body(outer, 'ceramic', M)}
-      {pen.body(inner, 'water', { open: true, alpha: 0.85 })}
-      {pen.line(inset(inner, 6), { fine: true, opacity: 0.35 })}
-      {pen.dot(big ? L - 34 : 64, 50, 2.6, 'metal', O)}
-      {pen.accent(rect(tx - 4, 46, 8, 8, 2))}
-      {pen.stud(tx, 38, 3)}
-      {pen.stud(tx, 62, 3)}
+      {feet.map((x) => <g key={x}>{clawFoot(pen, x)}</g>)}
+      {pen.body(body, 'ceramic', M)}
+      {pen.shade(poly([[x0 + 10, top + 34], [x1 - 10, top + 34], [x1 - 18, top + 44], [w / 2, top + 47], [x0 + 18, top + 44]]), 0.35)}
+      {/* rolled rim + water */}
+      {pen.body(rr(x0 - 2, top - 12, x1 - x0 + 4, 18, 9), 'ceramic', { ...O, tex: false })}
+      {pen.lit(rr(x0, top - 10, x1 - x0, 6, 3))}
+      {pen.body(rr(x0 + 6, top - 8, x1 - x0 - 12, 10, 5), 'water', { ...O, alpha: 0.9 })}
+      {sweet && bubbles(pen, bub)}
+      {/* taps */}
+      {pen.bar(poly([[x1 - 6, top - 10], [x1 - 6, top - 22], [x1 - 14, top - 22], [x1 - 14, top - 18]], false), 2.6, 'brass', O)}
+      {pen.stud(x1 - 2, top - 16, 2.4)}
+      {pen.stud(x1 - 10, top - 26, 2.4)}
     </g>
   );
 }
 
-export function Coffin(pen: Pen, L: number): JSX.Element {
-  const sx = L * 0.28;
-  const outline: Pt[] = [[6, 50], [sx, 10], [L - 8, 24], [L - 8, 76], [sx, 90]];
-  const lid: Pt[] = [[14, 50], [sx, 18], [L - 15, 29], [L - 15, 71], [sx, 82]];
-  const yTop = (x: number) => 10 + ((x - sx) * 14) / (L - 8 - sx);
-  const handles = [0.5, 0.75].map((t) => sx + (L - 8 - sx) * t);
-  const cross = L >= 200;
+function clawFoot(pen: Pen, x: number): JSX.Element {
   return (
     <g>
-      {pen.body(poly(outline), 'darkwood', { main: true })}
-      {pen.body(poly(lid), 'wood', { alpha: 0.85 })}
-      {pen.shade(poly([[6, 50], [sx, 90], [L - 8, 76], [L - 8, 72], [sx, 84], [12, 50]]), 0.9)}
-      {handles.map((x, i) => (
-        <g key={i}>
-          {pen.accent(rect(x - 6, yTop(x) - 3, 12, 4, 1.5))}
-          {pen.accent(rect(x - 6, 100 - yTop(x) - 1, 12, 4, 1.5))}
-        </g>
-      ))}
-      {cross ? (
-        <g>
-          {pen.accent(rect(L * 0.3, 47, L * 0.36, 6, 1))}
-          {pen.accent(rect(L * 0.4, 36, 6, 28, 1))}
-        </g>
-      ) : (
-        pen.accent(ngon(L * 0.52, 50, 7, 4, 0))
-      )}
+      {pen.accent(poly([[x - 4, 72], [x + 4, 72], [x + 5, 82], [x + 7, 86], [x - 7, 86], [x - 5, 82]]))}
+      {pen.accent(ell(x, 86, 6, 2.6))}
+    </g>
+  );
+}
+
+/** Bathtub along a vertical footprint: long basin seen from above, near end towards us. */
+function TubLong(pen: Pen, h: number): JSX.Element {
+  const sweet = pen.style === 'ribbon' || pen.style === 'lace' || pen.style === 'candy';
+  pen.ground(50, h - 10, 40, 6);
+  const end = h - 46;
+  return (
+    <g>
+      {[24, 76].map((x) => <g key={x}>{pen.accent(poly([[x - 4, h - 26], [x + 4, h - 26], [x + 6, h - 12], [x - 6, h - 12]]))}</g>)}
+      {pen.body(smooth([[8, end - 20], [92, end - 20], [90, end + 12], [76, end + 30], [50, end + 34], [24, end + 30], [10, end + 12]], true, 5), 'ceramic', M)}
+      {pen.body(rr(8, 14, 84, end - 4, 40), 'ceramic', { ...O, tex: false })}
+      {pen.lit(rr(11, 17, 78, end - 10, 37))}
+      {pen.body(rr(17, 24, 66, end - 24, 32), 'water', { ...O, alpha: 0.9 })}
+      {sweet && bubbles(pen, [[38, 60, 6], [56, 74, 4.5], [44, 96, 5], [62, 112, 6], [40, 128, 4]])}
+      {pen.bar(poly([[50, 18], [50, 6], [42, 6], [42, 12]], false), 2.6, 'brass', O)}
+      {pen.stud(36, 10, 2.4)}
+      {pen.stud(64, 10, 2.4)}
+    </g>
+  );
+}
+
+// ───────────── coffin ─────────────
+
+export function Coffin(pen: Pen, w: number, h: number): JSX.Element {
+  if (w > h) return CoffinLying(pen, w);
+  if (h > w) return CoffinLong(pen, h);
+  return CoffinUpright(pen);
+}
+
+const crossOn = (pen: Pen, cx: number, cy: number, s: number): JSX.Element => (
+  <g>
+    {pen.accent(rect(cx - s * 0.12, cy - s * 0.5, s * 0.24, s, 0.8))}
+    {pen.accent(rect(cx - s * 0.36, cy - s * 0.24, s * 0.72, s * 0.22, 0.8))}
+  </g>
+);
+
+/** Standing coffin, lid slid aside a little. */
+function CoffinUpright(pen: Pen): JSX.Element {
+  const hex = (dx: number): Pt[] => [[38 + dx, 5], [62 + dx, 5], [74 + dx, 28], [66 + dx, 88], [34 + dx, 88], [26 + dx, 28]];
+  const lidPts = hex(7).map(([x, y]) => [x + (y - 46) * 0.06, y] as Pt);
+  pen.ground(50, 90, 30, 4.5);
+  return (
+    <g>
+      {pen.body(poly(hex(0)), 'darkwood', { main: true })}
+      {pen.body(poly([[40, 11], [60, 11], [69, 29], [62, 83], [38, 83], [31, 29]]), 'fabric', { fill: pen.style === 'blueprint' ? undefined : pen.style === 'neon' ? '#3a1030' : '#8c2a3a', tex: false })}
+      {pen.shade(poly([[40, 11], [60, 11], [69, 29], [62, 83], [38, 83], [31, 29]]), 1)}
+      {pen.body(poly(lidPts), 'wood', { tex: true })}
+      {pen.line(inset(poly(lidPts), 5), { fine: true })}
+      {crossOn(pen, 58, 34, 20)}
+      {pen.stud(78, 50, 1.6)}
+      {pen.stud(76, 72, 1.6)}
+    </g>
+  );
+}
+
+/** Coffin lying on two trestles, head to the left. */
+function CoffinLying(pen: Pen, w: number): JSX.Element {
+  const sx = w * 0.3;
+  const cy = 38;
+  const lid: Pt[] = [[8, cy - 8], [sx, cy - 17], [w - 8, cy - 10], [w - 8, cy + 10], [sx, cy + 17], [8, cy + 8]];
+  const side: Pt[] = [[8, cy + 8], [sx, cy + 17], [w - 8, cy + 10], [w - 8, cy + 28], [sx, cy + 36], [8, cy + 26]];
+  pen.ground(w / 2, 89, w / 2 - 10, 5);
+  const trestle = (x: number) => (
+    <g key={x}>
+      {strut(pen, x, 62, x - 12, 88, 4, 'wood')}
+      {strut(pen, x, 62, x + 12, 88, 4, 'wood')}
+      {pen.bar(seg(x - 14, 64, x + 14, 64), 3, 'wood')}
+    </g>
+  );
+  const handles = [0.45, 0.65, 0.85].map((t) => sx + (w - 8 - sx) * t);
+  return (
+    <g>
+      {trestle(w * 0.28)}
+      {trestle(w * 0.75)}
+      {pen.body(poly(side), 'darkwood', { main: true })}
+      {pen.line(poly([[sx, cy + 17], [sx, cy + 36]], false), { fine: true })}
+      {handles.map((x) => <g key={x}>{pen.accent(rect(x - 5, cy + 20 - ((x - sx) / (w - 8 - sx)) * 7, 10, 3.4, 1.4))}</g>)}
+      {pen.body(poly(lid), 'wood', { tex: true })}
+      {pen.lit(poly(lid))}
+      {pen.line(inset(poly(lid), 4), { fine: true })}
+      {crossOn(pen, w * 0.48, cy, 18)}
+    </g>
+  );
+}
+
+/** Coffin lying along a vertical footprint, head away from us, foot end towards us. */
+function CoffinLong(pen: Pen, h: number): JSX.Element {
+  const foot = h - 38;
+  const lid: Pt[] = [[36, 10], [64, 10], [80, 56], [68, foot], [32, foot], [20, 56]];
+  const side: Pt[] = [[20, 56], [32, foot], [68, foot], [80, 56], [80, 72], [68, foot + 18], [32, foot + 18], [20, 72]];
+  pen.ground(50, h - 12, 34, 6);
+  return (
+    <g>
+      {leg(pen, 34, foot + 14, h - 12, 6, 'darkwood')}
+      {leg(pen, 66, foot + 14, h - 12, 6, 'darkwood')}
+      {pen.body(poly(side), 'darkwood', { main: true })}
+      {pen.lines([[[32, foot], [32, foot + 18]], [[68, foot], [68, foot + 18]]], { fine: true })}
+      {pen.accent(rect(44, foot + 6, 12, 3.4, 1.4))}
+      {pen.body(poly(lid), 'wood', { tex: true })}
+      {pen.lit(poly(lid))}
+      {pen.line(inset(poly(lid), 5), { fine: true })}
+      {crossOn(pen, 50, 70, 30)}
     </g>
   );
 }
