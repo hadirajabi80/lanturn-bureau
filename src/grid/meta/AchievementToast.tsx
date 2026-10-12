@@ -93,29 +93,31 @@ function ToastCard({ item, duration, onDismiss, onShow }: { item: ToastItem; dur
     <motion.div
       layout={!reduced}
       role="status"
-      className="pointer-events-auto relative flex items-center gap-3 overflow-hidden py-2.5 pl-2.5 pr-8"
+      className="pointer-events-auto relative flex items-center gap-3 overflow-hidden py-3 pl-3 pr-9"
       style={{
-        background: `linear-gradient(100deg, color-mix(in srgb, ${m.base} 16%, ${FP.panel}), ${FP.panel} 60%)`,
-        borderRadius: 10,
-        boxShadow: `inset 0 0 0 1px ${m.base}55, 0 16px 40px -18px rgba(0,0,0,0.9), 0 0 24px -12px ${m.base}`,
+        background: FP.panel,
+        borderRadius: 8,
+        boxShadow: `inset 0 0 0 2px ${FP.ink}, 3px 3px 0 ${FP.ink}`,
         color: FP.ink,
       }}
-      initial={reduced ? { opacity: 0 } : { opacity: 0, x: 80, scale: 0.96 }}
-      animate={{ opacity: 1, x: 0, scale: 1 }}
-      exit={reduced ? { opacity: 0 } : { opacity: 0, x: 60, transition: { duration: 0.2 } }}
-      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+      initial={reduced ? { opacity: 0 } : { opacity: 0, x: 40 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={reduced ? { opacity: 0 } : { opacity: 0, x: 40, transition: { duration: 0.15 } }}
+      transition={{ type: 'spring', stiffness: 520, damping: 34 }}
     >
       <Medallion tier={a.tier} size={42}>
-        <Icon size={19} strokeWidth={2.2} color={m.dark} />
+        <Icon size={19} strokeWidth={2.2} color={FP.ink} />
       </Medallion>
       <div className="min-w-0">
-        <p className="text-[10px] uppercase tracking-[0.22em]" style={{ fontFamily: FP.mono, color: m.base }}>
-          Achievement · {m.label}
+        <p className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: FP.muted }}>
+          Achievement unlocked
+          <TierSwatch tier={a.tier} />
+          {m.label}
         </p>
-        <p className="truncate text-[15px] font-bold leading-tight" style={{ fontFamily: FP.display }}>
+        <p className="truncate text-base font-extrabold leading-tight" style={{ fontFamily: FP.display }}>
           {a.title}
         </p>
-        <p className="truncate text-xs" style={{ color: FP.muted }}>
+        <p className="truncate text-[13px]" style={{ color: FP.muted }}>
           {a.description}
         </p>
       </div>
@@ -123,17 +125,17 @@ function ToastCard({ item, duration, onDismiss, onShow }: { item: ToastItem; dur
         type="button"
         aria-label="Dismiss"
         onClick={() => onDismiss(item.key)}
-        className="absolute right-1.5 top-1.5 grid h-6 w-6 place-items-center rounded opacity-60 transition hover:opacity-100"
-        style={{ color: FP.muted }}
+        className="absolute right-1.5 top-1.5 grid h-7 w-7 place-items-center rounded-md transition-colors hover:bg-[#F1F1EC]"
+        style={{ color: FP.ink }}
       >
-        <X size={14} />
+        <X size={15} />
       </button>
       {!reduced && (
         <motion.span
           aria-hidden
-          className="absolute bottom-0 left-0 h-[2px]"
-          style={{ background: m.base, boxShadow: `0 0 6px ${m.base}` }}
-          initial={{ width: '100%' }}
+          className="absolute bottom-[2px] left-[2px] h-[3px]"
+          style={{ background: FP.ink }}
+          initial={{ width: 'calc(100% - 4px)' }}
           animate={{ width: '0%' }}
           transition={{ duration: duration / 1000, ease: 'linear' }}
         />
@@ -142,26 +144,35 @@ function ToastCard({ item, duration, onDismiss, onShow }: { item: ToastItem; dur
   );
 }
 
-/** Round metal medallion (achievement badge face). */
+/** Small square swatch in the tier's spot colour. */
+export function TierSwatch({ tier, size = 9 }: { tier: keyof typeof METAL; size?: number }) {
+  return (
+    <span
+      aria-hidden
+      className="inline-block shrink-0"
+      style={{ width: size, height: size, borderRadius: 2, background: METAL[tier].base, boxShadow: `inset 0 0 0 1px ${FP.ink}` }}
+    />
+  );
+}
+
+/**
+ * Round badge face, printed like a rubber stamp: earned = yellow disc with an ink double ring,
+ * locked = white disc with a dashed grey outline.
+ */
 export function Medallion({ tier, size = 48, locked, children }: { tier: keyof typeof METAL; size?: number; locked?: boolean; children?: ReactNode }) {
-  const m = METAL[tier];
+  void tier;
   return (
     <span
       className="relative grid shrink-0 place-items-center rounded-full"
       style={{
         width: size,
         height: size,
-        background: locked
-          ? 'radial-gradient(circle at 35% 30%, #3A332C, #1C1814 70%)'
-          : `radial-gradient(circle at 32% 28%, ${m.light}, ${m.base} 48%, ${m.dark} 100%)`,
-        boxShadow: locked
-          ? 'inset 0 0 0 1px rgba(255,255,255,0.08), inset 0 2px 4px rgba(0,0,0,0.6)'
-          : `inset 0 0 0 ${Math.max(2, size / 16)}px ${m.dark}66, inset 0 1px 1px rgba(255,255,255,0.6), 0 2px 8px -2px rgba(0,0,0,0.8)`,
+        background: locked ? '#FFFFFF' : FP.hl,
+        boxShadow: locked ? undefined : `inset 0 0 0 2px ${FP.ink}`,
+        border: locked ? `1.5px dashed #9A9A94` : undefined,
       }}
     >
-      {!locked && (
-        <span aria-hidden className="absolute rounded-full" style={{ inset: size * 0.12, border: `1px dashed ${m.dark}88` }} />
-      )}
+      {!locked && <span aria-hidden className="absolute rounded-full" style={{ inset: Math.max(3, size * 0.1), border: `1px solid ${FP.ink}` }} />}
       <span className="relative grid place-items-center">{children}</span>
     </span>
   );

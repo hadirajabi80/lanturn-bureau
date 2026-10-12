@@ -25,7 +25,7 @@ function renderInline(s: string, keyBase: string): ReactNode[] {
     if (tok.startsWith('**')) out.push(<strong key={k} className="font-semibold">{tok.slice(2, -2)}</strong>);
     else if (tok.startsWith('`')) {
       out.push(
-        <code key={k} className="rounded bg-black/25 px-1.5 py-0.5 font-mono text-[0.92em]">
+        <code key={k} className="rounded bg-print-paper px-1.5 py-0.5 font-mono text-[0.92em] shadow-[inset_0_0_0_1px_#D9D9D2]">
           {tok.slice(1, -1)}
         </code>,
       );
@@ -60,8 +60,10 @@ function renderBlocks(text: string, tone: Tone): ReactNode[] {
   const blocks: ReactNode[] = [];
   let i = 0;
   let b = 0;
-  const border = tone === 'paper' ? 'border-black/15' : 'border-white/10';
-  const headBg = tone === 'paper' ? 'bg-black/5' : 'bg-white/5';
+  // v3 print: both tones are ink on white / paper.
+  void tone;
+  const border = 'border-print-rule';
+  const headBg = 'bg-print-paper';
 
   while (i < lines.length) {
     const line = lines[i] ?? '';
@@ -84,7 +86,7 @@ function renderBlocks(text: string, tone: Tone): ReactNode[] {
           className={clsx(
             'overflow-x-auto whitespace-pre rounded-lg border p-3 font-mono text-[13px] leading-6',
             border,
-            tone === 'paper' ? 'bg-black/5' : 'bg-black/30',
+            'bg-print-paper',
           )}
         >
           {body.join('\n')}
@@ -107,12 +109,12 @@ function renderBlocks(text: string, tone: Tone): ReactNode[] {
       const body = hasHeader ? rows.slice(1) : rows;
       blocks.push(
         <div key={key} className={clsx('overflow-x-auto rounded-lg border', border)}>
-          <table className="w-full border-collapse text-left font-mono text-[12.5px] leading-5">
+          <table className="w-full border-collapse text-left text-[13px] leading-5 tabular-nums">
             {head && (
               <thead className={headBg}>
                 <tr>
                   {head.map((c, ci) => (
-                    <th key={ci} className={clsx('border-b px-2.5 py-1.5 font-semibold', border)}>
+                    <th key={ci} className="border-b-2 border-print-ink px-2.5 py-1.5 font-semibold">
                       {renderInline(c, `${key}-h${ci}`)}
                     </th>
                   ))}
@@ -162,7 +164,7 @@ function renderBlocks(text: string, tone: Tone): ReactNode[] {
       blocks.push(
         <blockquote
           key={key}
-          className={clsx('border-l-2 pl-3 italic', tone === 'paper' ? 'border-[#8a6a35]/50' : 'border-brass/50 text-paper/85')}
+          className="border-l-[3px] border-print-ink pl-3 text-print-muted"
         >
           {withBreaks(q, key)}
         </blockquote>,

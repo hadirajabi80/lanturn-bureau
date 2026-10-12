@@ -37,7 +37,7 @@ function Cell({ label, spec, size, mood, speaking }: { label: string; spec: Avat
   return (
     <figure className="flex flex-col items-center gap-1">
       <Avatar spec={spec} size={size} mood={mood} speaking={speaking} />
-      <figcaption className="max-w-[9rem] truncate text-center font-mono text-[10px] text-paper/70">{label}</figcaption>
+      <figcaption className="max-w-[9rem] truncate text-center text-xs text-print-muted">{label}</figcaption>
     </figure>
   );
 }
@@ -45,7 +45,7 @@ function Cell({ label, spec, size, mood, speaking }: { label: string; spec: Avat
 function Row({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="mb-8">
-      <h3 className="mb-3 font-display text-lg text-brass">{title}</h3>
+      <h3 className="mb-3 border-b-2 border-print-ink pb-1 font-display text-lg font-extrabold text-print-ink">{title}</h3>
       <div className="flex flex-wrap gap-4">{children}</div>
     </section>
   );
@@ -57,7 +57,7 @@ export function AvatarPreview(): JSX.Element {
   const [mood, setMood] = useState<Mood>('neutral');
 
   return (
-    <div className="min-h-dvh bg-ink p-6 text-paper">
+    <div className="min-h-dvh bg-print-paper p-6 text-print-ink">
       <header className="mb-6 flex flex-wrap items-center gap-4">
         <h2 className="font-display text-2xl">Avatar preview</h2>
         <label className="flex items-center gap-2 text-sm">
@@ -70,7 +70,7 @@ export function AvatarPreview(): JSX.Element {
         </label>
         <label className="flex items-center gap-2 text-sm">
           mood
-          <select className="rounded bg-fog px-2 py-1" value={mood} onChange={(e) => setMood(e.target.value as Mood)}>
+          <select className="rounded-md bg-print-card px-2 py-1 shadow-[inset_0_0_0_1.5px_#141414]" value={mood} onChange={(e) => setMood(e.target.value as Mood)}>
             {MOODS.map((m) => (
               <option key={m}>{m}</option>
             ))}

@@ -5,15 +5,15 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Flame, Timer, Zap } from 'lucide-react';
+import { Zap } from 'lucide-react';
 import { DISTRICTS } from '@/grid/skins/districts';
 import { useFloorplan, type AccuseResult, type RecordOutcome } from '@/grid/store';
 import type { Puzzle, Tier } from '@/grid/types';
-import { BrassButton, GhostButton, MonoStat, PageShell } from '@/grid/ui';
+import { BrassButton, GhostButton, MonoStat, PageShell, SkinProvider } from '@/grid/ui';
 import { generateCustom, hashSeed } from '../desk/bridge';
 import { CasePlayer } from '../desk/CasePlayer';
 import { rng } from '../desk/util';
-import { RunCard } from './shared';
+import { FactTable, IntroSheet, ModeLayout, RunCard } from './shared';
 
 export const BLITZ_MS = 180_000;
 const CLEAN_BONUS_MS = 10_000;
@@ -125,18 +125,18 @@ export function BlitzScreen() {
         backLabel="Abandon the run"
         kicker={`Blitz · case ${index + 1}`}
         hud={
-          <div className="relative flex items-center gap-1.5 rounded-full border border-[var(--fp-hair)] bg-[var(--dk-shade,rgb(0_0_0/0.25))] px-3 py-1 font-mono text-sm">
-            <Zap className="size-3.5 text-[var(--dk-accent-text,var(--fp-accent2))]" aria-hidden />
+          <div className="relative flex h-8 items-center gap-1.5 rounded-md bg-(--fp-panel) px-2.5 font-mono text-sm font-semibold text-(--fp-ink) shadow-[inset_0_0_0_2px_var(--fp-ink)]">
+            <Zap className="size-3.5 fill-(--fp-hl)" strokeWidth={2.2} aria-hidden />
             <span aria-label={`${score} cases closed`}>{score}</span>
             <AnimatePresence>
               {flash && (
                 <motion.span
                   key={flash.id}
-                  initial={{ y: 0, opacity: 1 }}
-                  animate={{ y: 26, opacity: 0 }}
-                  transition={{ duration: 1.6 }}
-                  className="pointer-events-none absolute left-0 top-full whitespace-nowrap text-xs font-bold"
-                  style={{ color: flash.good ? '#8fe3a0' : '#ff8a7a' }}
+                  initial={{ y: -4, opacity: 0 }}
+                  animate={{ y: [-4, 0, 0, 6], opacity: [0, 1, 1, 0] }}
+                  transition={{ duration: 1.3, times: [0, 0.12, 0.8, 1] }}
+                  className="pointer-events-none absolute left-0 top-full mt-1.5 whitespace-nowrap rounded-[4px] px-1.5 py-0.5 font-sans text-xs font-bold text-white shadow-[inset_0_0_0_1.5px_var(--fp-ink)]"
+                  style={{ background: flash.good ? 'var(--fp-green, #1E8A4C)' : 'var(--fp-accent, #D7261E)' }}
                   onAnimationComplete={() => setFlash(null)}
                 >
                   {flash.text}
@@ -150,53 +150,65 @@ export function BlitzScreen() {
   }
 
   return (
-    <PageShell title="Blitz" kicker="Modes · three minutes" back="/plans/modes" backLabel="Back to modes">
-      <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
+    <SkinProvider>
+      <PageShell title="Blitz" kicker="Modes · three minutes" back="/plans/modes" backLabel="Back to modes">
         {phase === 'over' && end ? (
-          <RunCard
-            kicker="Time's up"
-            title={end.newBest ? 'A new Bureau record' : 'The clock wins'}
-            big={end.score}
-            bigLabel={end.score === 1 ? 'case closed' : 'cases closed'}
-            lines={<>Best: {Math.max(best, end.score)}</>}
-            outcome={end.outcome}
-          >
-            <BrassButton onClick={start} icon={<Zap className="size-4" />}>
-              Again
-            </BrassButton>
-            <GhostButton onClick={() => navigate('/plans/modes')}>Back to modes</GhostButton>
-          </RunCard>
-        ) : (
-          <section className="fp-panel mx-auto max-w-xl p-6">
-            <div className="flex items-center gap-3">
-              <span className="grid size-12 place-items-center rounded-full bg-[var(--dk-shade,rgb(0_0_0/0.25))]">
-                <Timer className="size-6 text-[var(--dk-accent-text,var(--fp-accent2))]" />
-              </span>
-              <div>
-                <div className="font-mono text-[10px] uppercase tracking-[0.28em] text-[var(--fp-muted)]">3:00 on the clock</div>
-                <h2 className="font-display text-2xl font-black">Close as many as you can</h2>
-              </div>
-            </div>
-            <ul className="mt-5 space-y-2 text-sm leading-relaxed">
-              <li>Small classic cases arrive back to back — Rookie and Detective sizes.</li>
-              <li>
-                Every correct lever + accusation scores <b>+1</b>. Solve it without Otto or a Reveal and the clock gains <b>+10 s</b>.
-              </li>
-              <li className="flex items-start gap-1.5">
-                <Flame className="mt-0.5 size-4 shrink-0 text-[#ff8a3d]" /> A burned file costs <b>20 s</b> and the next case comes in.
-              </li>
-            </ul>
-            <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
-              <MonoStat label="Your best" value={best} />
-              <BrassButton size="lg" onClick={start} icon={<Zap className="size-4" />}>
-                Start the clock
+          <div className="py-2 sm:py-6">
+            <RunCard
+              kicker="Time's up"
+              title={end.newBest ? 'A new Bureau record' : 'The clock wins'}
+              big={end.score}
+              bigLabel={end.score === 1 ? 'case closed' : 'cases closed'}
+              lines={<>Best: {Math.max(best, end.score)}</>}
+              outcome={end.outcome}
+            >
+              <BrassButton onClick={start} icon={<Zap className="size-4" />}>
+                Again
               </BrassButton>
-            </div>
-            {phase === 'running' && !puzzle && <p className="mt-4 text-sm text-[var(--fp-danger)]">Could not draw a plan. Try again.</p>}
-          </section>
+              <GhostButton onClick={() => navigate('/plans/modes')}>Back to modes</GhostButton>
+            </RunCard>
+          </div>
+        ) : (
+          <ModeLayout
+            aside={
+              <FactTable
+                title="Scoring"
+                rows={[
+                  ['Case closed', '+1'],
+                  ['No Otto, no Reveal', '+10 s'],
+                  ['Burned file', '−20 s'],
+                ]}
+              />
+            }
+          >
+            <IntroSheet
+              label="3:00 on the clock"
+              title="Close as many as you can"
+              figure="3:00"
+              figureLabel="Three minutes"
+              rules={[
+                <>Small classic cases arrive back to back, in Rookie and Detective sizes.</>,
+                <>
+                  Every correct lever and accusation scores <b>+1</b>. Solve it without Otto or a Reveal and the clock gains <b>+10 s</b>.
+                </>,
+                <>
+                  A burned file costs <b>20 s</b> and the next case comes in.
+                </>,
+              ]}
+              footer={
+                <>
+                  <MonoStat label="Your best" value={best} />
+                  <BrassButton size="lg" onClick={start} icon={<Zap className="size-4" />}>
+                    Start the clock
+                  </BrassButton>
+                  {phase === 'running' && !puzzle && <p className="w-full text-sm font-semibold text-(--fp-accent2)">Could not draw a plan. Try again.</p>}
+                </>
+              }
+            />
+          </ModeLayout>
         )}
-      </div>
-    </PageShell>
+      </PageShell>
+    </SkinProvider>
   );
 }
 

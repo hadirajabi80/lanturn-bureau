@@ -1,23 +1,55 @@
-/** A small swinging brass lantern — Suspense fallback / loading indicator. Uses --fp-* vars when available. */
-export function LanternLoader({ label = 'Lighting the lamp…', size = 56 }: { label?: string; size?: number }) {
+import { motion } from 'framer-motion';
+import { useFpReduced } from './useFpReduced';
+
+/** Fill order of the 3×3 plan (a snake, like a pencil working across a grid); the last cell is the victim's room. */
+const ORDER = [0, 1, 2, 5, 4, 3, 6, 7, 8];
+const STEP = 0.16;
+const CYCLE = ORDER.length * STEP + 0.7;
+
+/**
+ * Loading indicator (name kept from v2): a small 3×3 floor plan whose rooms are highlighted in one by one,
+ * the last one in red. Reduced motion: a still, half-filled plan.
+ */
+export function LanternLoader({ label = 'Opening the file…', size = 56 }: { label?: string; size?: number }) {
+  const reduced = useFpReduced();
+  const cell = 14;
+  const gap = 2;
+  const W = cell * 3 + gap * 4;
   return (
-    <div role="status" aria-live="polite" className="flex min-h-[50dvh] flex-col items-center justify-center gap-4">
-      <svg viewBox="0 0 48 72" width={size} height={size * 1.5} aria-hidden className="fp-lantern-swing overflow-visible">
-        <defs>
-          <radialGradient id="fp-ll-glow">
-            <stop offset="0" stopColor="var(--fp-glow, #FFB347)" stopOpacity="0.8" />
-            <stop offset="1" stopColor="var(--fp-glow, #FFB347)" stopOpacity="0" />
-          </radialGradient>
-        </defs>
-        <line x1="24" y1="0" x2="24" y2="12" stroke="var(--fp-accent, #C9974A)" strokeWidth="1.5" />
-        <circle cx="24" cy="14" r="3" fill="none" stroke="var(--fp-accent, #C9974A)" strokeWidth="1.5" />
-        <circle cx="24" cy="44" r="24" fill="url(#fp-ll-glow)" className="fp-lantern-flame" />
-        <path d="M14 22h20l-3 6H17z" fill="var(--fp-accent, #C9974A)" />
-        <rect x="16" y="28" width="16" height="26" rx="2" fill="color-mix(in srgb, var(--fp-glow, #FFB347) 30%, transparent)" stroke="var(--fp-accent, #C9974A)" strokeWidth="1.5" />
-        <path d="M24 34c3 4 3 8 0 11-3-3-3-7 0-11z" fill="var(--fp-glow, #FFB347)" className="fp-lantern-flame" />
-        <path d="M14 54h20l-2 5H16z" fill="var(--fp-accent, #C9974A)" />
+    <div role="status" aria-live="polite" className="flex min-h-[50dvh] flex-col items-center justify-center gap-3">
+      <svg viewBox={`0 0 ${W} ${W}`} width={size} height={size} aria-hidden>
+        <rect x={0.75} y={0.75} width={W - 1.5} height={W - 1.5} rx={2} fill="#FFFFFF" stroke="var(--fp-ink, #141414)" strokeWidth={1.5} />
+        {ORDER.map((idx, k) => {
+          const x = gap + (idx % 3) * (cell + gap);
+          const y = gap + Math.floor(idx / 3) * (cell + gap);
+          const last = k === ORDER.length - 1;
+          const fill = last ? 'var(--fp-accent, #D7261E)' : 'var(--fp-hl, #FFD84D)';
+          if (reduced) {
+            return <rect key={idx} x={x} y={y} width={cell} height={cell} rx={1} fill={k < 4 || last ? fill : '#FFFFFF'} stroke="var(--fp-ink, #141414)" strokeWidth={1} />;
+          }
+          const t0 = (k * STEP) / CYCLE;
+          const t1 = Math.min(0.999, (k * STEP + 0.08) / CYCLE);
+          return (
+            <g key={idx}>
+              <rect x={x} y={y} width={cell} height={cell} rx={1} fill="#FFFFFF" stroke="var(--fp-ink, #141414)" strokeWidth={1} />
+              <motion.rect
+                x={x}
+                y={y}
+                width={cell}
+                height={cell}
+                rx={1}
+                fill={fill}
+                stroke="var(--fp-ink, #141414)"
+                strokeWidth={1}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: [0, 0, 1, 1, 0] }}
+                transition={{ duration: CYCLE, times: [0, t0, t1, 0.94, 1], repeat: Infinity, ease: 'linear' }}
+              />
+            </g>
+          );
+        })}
       </svg>
-      <span className="font-mono text-[11px] uppercase tracking-[0.3em]" style={{ color: 'var(--fp-muted, #A8977D)' }}>{label}</span>
+      <span className="text-[13px] font-semibold text-[var(--fp-muted,#5E5E5A)]">{label}</span>
     </div>
   );
 }

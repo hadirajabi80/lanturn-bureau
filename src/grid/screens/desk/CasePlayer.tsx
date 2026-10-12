@@ -7,10 +7,11 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { motion, useReducedMotion } from 'framer-motion';
+import { useReducedMotion } from 'framer-motion';
 import clsx from 'clsx';
-import { ChevronLeft, Lightbulb, Redo2, Settings2, Tag, Undo2 } from 'lucide-react';
+import { ArrowLeft, CircleHelp, Lightbulb, Redo2, Settings2, Tag, Undo2 } from 'lucide-react';
 import { Stamp } from '@/components/fx';
+import { PRINT } from '@/grid/ui';
 import { toast } from '@/components/ui/Toast';
 import {
   openCellsFor,
@@ -25,10 +26,10 @@ import { ambience, codeFor, killersOf, play, playSuccess, playWrong, victimsOf }
 import { BurnOverlay, type BurnAction } from './BurnOverlay';
 import { sameLink, type ClueLink } from './clueLinks';
 import { Dossier, TestimonySlip } from './Dossier';
-import { Instruments } from './Instruments';
+import { Instruments, TOOLS } from './Instruments';
 import { LineUp } from './LineUp';
 import { OttoPanel, type OttoView } from './OttoPanel';
-import { BrassBtn, DeskBoard, DeskFrame, GhostBtn, MonoClock, Overlay, PanelBox, VariantIcon, anyOverlayOpen, districtFor, moodOf } from './parts';
+import { BrassBtn, DeskBoard, DeskFrame, GhostBtn, MonoClock, Overlay, PanelBox, PlanFrame, SHEET_CLASS, SquareBtn, VariantIcon, anyOverlayOpen, districtFor } from './parts';
 import { ResultsCard, type ResultAction } from './ResultsCard';
 import { ScenarioExplainer } from './ScenarioExplainer';
 import { TIER_NAME, VARIANT_META, formatTime, pad2, shareOrCopy, shareText } from './util';
@@ -326,7 +327,7 @@ export function CasePlayer(props: CasePlayerProps) {
         break;
       case 'blocked':
         // a board tap already shows the piece's name tag ("Barrel · blocks the square")
-        if (!opts.fromBoard) warn('Blocking furniture — nobody can stand there.');
+        if (!opts.fromBoard) warn('Blocking furniture. Nobody can stand there.');
         break;
       case 'need-select':
         warn('Pick a suspect from the dossier first.');
@@ -338,6 +339,16 @@ export function CasePlayer(props: CasePlayerProps) {
 
   const onCellTap = (cell: Cell) => {
     actOnCell(cell, { fromBoard: true });
+  };
+  // Nobody here: a drag marks (or, starting on a marked square, clears) every square it passes; one undo step
+  const paintOn = useRef(true);
+  const onCellPaint = (cell: Cell, phase: 'start' | 'move') => {
+    if (!editable || replay) return;
+    const s = store();
+    if (phase === 'start') paintOn.current = !s.isEmptyMarked(puzzle, cell);
+    const before = s.active?.marks.crosses;
+    s.markEmpty(puzzle, [cell], paintOn.current, phase === 'move');
+    if (store().active?.marks.crosses !== before) play('cross');
   };
   const onCellLongPress = (cell: Cell) => {
     if (!editable) return;
@@ -516,10 +527,8 @@ export function CasePlayer(props: CasePlayerProps) {
       }
       return;
     }
-    if (k === '1') store().setTool('pin');
-    else if (k === '2') store().setTool('pencil');
-    else if (k === '3') store().setTool('cross');
-    else if (k === '4') store().setTool('erase');
+    const toolKey = TOOLS.find((x) => x.key === k);
+    if (toolKey) store().setTool(toolKey.id);
     else if (lower === 'o') askOtto();
     else if (lower === 'r') askReveal();
     else if (lower === 'u') {
@@ -583,19 +592,15 @@ export function CasePlayer(props: CasePlayerProps) {
           burn={phase === 'burned'}
           onCellTap={onCellTap}
           onCellLongPress={onCellLongPress}
+          onCellPaint={onCellPaint}
           caseCode={code}
           maxWidth={wide ? 1600 : undefined}
         />
       ) : (
-        <div className="aspect-square w-full animate-pulse rounded-[10px] bg-[var(--dk-shade,rgb(255_255_255/0.05))]" />
+        <div className="aspect-square w-full rounded-[4px] bg-[var(--dk-shade)]" />
       )}
       <div className="pointer-events-none absolute inset-0 grid place-items-center">
-        <Stamp
-          text="Case closed"
-          show={phase === 'solved' && !replay}
-          color={moodOf(district) === 'light' ? district.palette.accent : undefined}
-          className="text-3xl sm:text-5xl"
-        />
+        <Stamp text="Case closed" show={phase === 'solved' && !replay} color={PRINT.red} className="text-3xl sm:text-5xl" />
       </div>
     </div>
   );
@@ -628,43 +633,39 @@ export function CasePlayer(props: CasePlayerProps) {
     <button
       type="button"
       onClick={() => setScenarioOpen(true)}
-      className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-[var(--fp-hair)] bg-[var(--dk-shade,rgb(0_0_0/0.25))] px-3 text-[11px] font-semibold text-[var(--fp-ink)] hover:bg-[var(--dk-hover,rgb(255_255_255/0.06))] focus-visible:outline-2 focus-visible:outline-[var(--fp-accent2)]"
+      className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-[6px] border-2 border-[var(--fp-ink)] bg-[var(--fp-panel)] px-2.5 text-[13px] font-semibold text-[var(--fp-ink)] hover:bg-[var(--dk-hover)]"
       aria-label={`Scenario: ${VARIANT_META[variant].name}`}
     >
-      <VariantIcon variant={variant} className="size-3.5 text-[var(--dk-accent-text,var(--fp-accent2))]" />
+      <VariantIcon variant={variant} className="size-4 text-[var(--fp-accent)]" />
       <span className="max-[420px]:hidden">{VARIANT_META[variant].name}</span>
-      {isNewVariant && <span className="rounded-full bg-[var(--fp-danger)] px-1.5 text-[9px] uppercase text-white">new</span>}
+      {isNewVariant && <span className="fp-plate !px-1 !py-0 !text-[12px]">New</span>}
     </button>
   );
 
   const settingsBtn = (
-    <button
-      type="button"
-      onClick={() => setSettingsOpen(true)}
-      aria-label="Desk settings"
-      className="grid size-9 shrink-0 place-items-center rounded-full text-[var(--fp-muted)] hover:bg-[var(--dk-hover,rgb(255_255_255/0.08))] hover:text-[var(--fp-ink)] focus-visible:outline-2 focus-visible:outline-[var(--fp-accent2)]"
-    >
-      <Settings2 className="size-[18px]" />
-    </button>
+    <>
+      {/* the desk is saved as you go, so the rules page can be opened mid-case */}
+      <Link to="/plans/guide" aria-label="How to play" title="How to play" className="fp-ghost size-9 shrink-0">
+        <CircleHelp className="size-[18px]" />
+      </Link>
+      <SquareBtn label="Desk settings" onClick={() => setSettingsOpen(true)}>
+        <Settings2 className="size-[18px]" />
+      </SquareBtn>
+    </>
   );
 
   const backBtn = (
-    <Link
-      to={backTo}
-      aria-label={backLabel}
-      title={backLabel}
-      className="grid size-9 shrink-0 place-items-center rounded-full text-[var(--fp-ink)] hover:bg-[var(--dk-hover,rgb(255_255_255/0.08))] focus-visible:outline-2 focus-visible:outline-[var(--fp-accent2)]"
-    >
-      <ChevronLeft className="size-5" />
+    <Link to={backTo} aria-label={backLabel} title={backLabel} className="fp-ghost size-9 shrink-0">
+      <ArrowLeft className="size-[18px]" />
     </Link>
   );
 
   const titleBlock = (
     <div className="min-w-0 flex-1">
-      <div className="truncate text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--fp-muted)]">{kicker}</div>
-      <h1 className="truncate font-display text-lg font-bold leading-tight sm:text-2xl">
+      <div className="truncate text-[13px] font-semibold leading-tight text-[var(--fp-muted)]">{kicker}</div>
+      <h1 className="truncate font-display text-[19px] font-extrabold leading-tight tracking-[-0.02em] sm:text-[26px]">
         {puzzle.title}
-        <span className="ml-2 align-middle font-mono text-[11px] font-normal text-[var(--fp-muted)]">
+        <span className="ml-2.5 align-middle font-mono text-[13px] font-medium tracking-normal text-[var(--fp-muted)]">
           {puzzle.rows}×{puzzle.cols} · {code}
         </span>
       </h1>
@@ -738,29 +739,29 @@ export function CasePlayer(props: CasePlayerProps) {
       )}
       <Overlay open={confirm !== null} onClose={() => setConfirm(null)} label="Confirm">
         <div className="grid min-h-dvh place-items-center p-4">
-          <PanelBox className="w-full max-w-sm p-5">
+          <div className={clsx(SHEET_CLASS, 'w-full max-w-sm p-5')}>
             {confirm === 'lever' ? (
               <>
-                <h2 className="font-display text-xl font-bold">Close the case?</h2>
-                <p className="mt-2 text-sm text-[var(--fp-muted)]">
+                <h2 className="font-display text-2xl font-extrabold tracking-[-0.02em]">Close the case?</h2>
+                <p className="mt-2 text-[15px] leading-snug text-[var(--fp-ink)]">
                   {pinned < total
-                    ? `${total - pinned} ${total - pinned === 1 ? 'person is' : 'people are'} still unpinned. Pulling the lever now burns the file.`
+                    ? `${total - pinned} ${total - pinned === 1 ? 'person is' : 'people are'} still unpinned. Closing now burns the file.`
                     : 'If a single pin is wrong, the file burns and the attempt is lost.'}
                 </p>
-                <div className="mt-5 flex justify-end gap-2">
+                <div className="mt-5 flex flex-wrap justify-end gap-2">
                   <GhostBtn onClick={() => setConfirm(null)}>Not yet</GhostBtn>
                   <BrassBtn onClick={doLever} data-autofocus>
-                    Pull the lever
+                    Close the case
                   </BrassBtn>
                 </div>
               </>
             ) : (
               <>
-                <h2 className="font-display text-xl font-bold">Reveal one suspect?</h2>
-                <p className="mt-2 text-sm text-[var(--fp-muted)]">
+                <h2 className="font-display text-2xl font-extrabold tracking-[-0.02em]">Reveal one suspect?</h2>
+                <p className="mt-2 text-[15px] leading-snug text-[var(--fp-ink)]">
                   The selected suspect (or the next one) is pinned on the right square. A reveal costs the third star; two cost the second.
                 </p>
-                <div className="mt-5 flex justify-end gap-2">
+                <div className="mt-5 flex flex-wrap justify-end gap-2">
                   <GhostBtn onClick={() => setConfirm(null)}>Cancel</GhostBtn>
                   <BrassBtn onClick={doReveal} data-autofocus icon={<Lightbulb className="size-4" />}>
                     Reveal
@@ -768,7 +769,7 @@ export function CasePlayer(props: CasePlayerProps) {
                 </div>
               </>
             )}
-          </PanelBox>
+          </div>
         </div>
       </Overlay>
       <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} settings={settings} />
@@ -778,32 +779,26 @@ export function CasePlayer(props: CasePlayerProps) {
   // ─────────────── desktop ───────────────
   if (wide) {
     return (
-      <DeskFrame district={district} lampFollow={settings.lampFollow}>
+      <DeskFrame district={district}>
         <div className="mx-auto flex h-dvh max-w-[2200px] flex-col px-4 pb-4 2xl:px-8" style={{ paddingTop: 'calc(0.75rem + var(--safe-top))' }}>
-          <header className="flex shrink-0 items-center gap-3 pb-3">
+          <header className="mb-4 flex shrink-0 items-center gap-3 border-b-2 border-[var(--fp-ink)] pb-3">
             {backBtn}
+            <DistrictSwatch />
             {titleBlock}
             {props.hud}
             {scenarioChip}
             {settingsBtn}
           </header>
-          <div className="grid min-h-0 flex-1 grid-cols-[minmax(240px,300px)_minmax(0,1fr)_210px] gap-4 2xl:grid-cols-[340px_minmax(0,1fr)_230px]">
+          <div className="grid min-h-0 flex-1 grid-cols-[minmax(240px,300px)_minmax(0,1fr)_220px] gap-5 2xl:grid-cols-[340px_minmax(0,1fr)_240px]">
             <PanelBox as="aside" className="flex min-h-0 flex-col overflow-hidden">
               <div className="min-h-0 flex-1 overflow-y-auto px-3 pt-3">
                 <Dossier {...dossierProps} layout="rail" />
               </div>
-              <div className="max-h-[48%] shrink-0 overflow-y-auto border-t border-[var(--fp-hair)] p-3">{slip}</div>
+              <div className="mx-[2px] mb-[2px] max-h-[52%] shrink-0 overflow-y-auto rounded-b-[6px] border-t-2 border-[var(--fp-ink)] bg-[var(--fp-bg)] p-3">{slip}</div>
             </PanelBox>
 
-            <main className="relative flex min-h-0 items-center justify-center overflow-auto [perspective:1600px]">
-              <div
-                aria-hidden
-                className="pointer-events-none absolute inset-0"
-                style={{ background: 'radial-gradient(55% 50% at 50% 38%, color-mix(in srgb, var(--fp-glow) 18%, transparent), transparent 75%)' }}
-              />
-              <TiltPlan disabled={reduced || !settings.lampFollow}>
-                <div className="w-[min(100%,calc(100dvh-120px))] min-w-[320px]">{board}</div>
-              </TiltPlan>
+            <main className="relative flex min-h-0 items-center justify-center overflow-auto px-2 py-3">
+              <PlanFrame className="w-[min(100%,calc(100dvh-150px))] min-w-[320px]">{board}</PlanFrame>
             </main>
 
             <PanelBox as="aside" className="flex min-h-0 flex-col overflow-y-auto p-3">
@@ -819,49 +814,47 @@ export function CasePlayer(props: CasePlayerProps) {
 
   // ─────────────── phone ───────────────
   return (
-    <DeskFrame district={district} lampFollow={false}>
+    <DeskFrame district={district}>
       <div className="flex min-h-dvh flex-col" style={{ paddingBottom: 'calc(96px + var(--safe-bottom))' }}>
-        <header className="sticky top-0 z-30 flex items-center gap-1.5 px-2 pb-2 backdrop-blur" style={{ background: 'color-mix(in srgb, var(--fp-bg) 82%, transparent)', paddingTop: 'calc(0.5rem + var(--safe-top))' }}>
+        <header
+          className="sticky top-0 z-30 flex items-center gap-2 border-b-2 border-[var(--fp-ink)] bg-[var(--fp-bg)] px-2 pb-2"
+          style={{ paddingTop: 'calc(0.5rem + var(--safe-top))' }}
+        >
           {backBtn}
           {titleBlock}
           {props.hud}
           {clock !== null && <MonoClock ms={clock} warn={clockWarn} className="!px-2 !py-1 text-sm" label={instrumentsProps.clockLabel} />}
         </header>
-        <div className="flex items-center gap-1 px-2 pb-1">
+        <div className="flex items-center gap-1.5 px-2 py-2">
           {scenarioChip}
           <div className="flex-1" />
-          <IconMini
+          <SquareBtn
             label={settings.furnitureLabels ? 'Hide furniture name labels' : 'Show furniture name labels'}
             onClick={instrumentsProps.onToggleFurnitureLabels}
             pressed={settings.furnitureLabels}
           >
             <Tag className="size-[18px]" />
-          </IconMini>
-          <IconMini label="Undo" onClick={() => store().undo()} disabled={!editable || !desk?.undo.length}>
+          </SquareBtn>
+          <SquareBtn label="Undo" onClick={() => store().undo()} disabled={!editable || !desk?.undo.length}>
             <Undo2 className="size-[18px]" />
-          </IconMini>
-          <IconMini label="Redo" onClick={() => store().redo()} disabled={!editable || !desk?.redo.length}>
+          </SquareBtn>
+          <SquareBtn label="Redo" onClick={() => store().redo()} disabled={!editable || !desk?.redo.length}>
             <Redo2 className="size-[18px]" />
-          </IconMini>
+          </SquareBtn>
           {allowReveal && (
-            <IconMini label="Reveal one suspect" onClick={askReveal} disabled={!editable}>
+            <SquareBtn label="Reveal one suspect" onClick={askReveal} disabled={!editable}>
               <Lightbulb className="size-[18px]" />
-            </IconMini>
+            </SquareBtn>
           )}
           {settingsBtn}
         </div>
-        <div className="relative px-1.5">
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-x-0 -top-6 h-40"
-            style={{ background: 'radial-gradient(60% 100% at 50% 0%, color-mix(in srgb, var(--fp-glow) 20%, transparent), transparent)' }}
-          />
-          {board}
+        <div className="relative px-2 pb-1 pt-1.5">
+          <PlanFrame className="!p-1">{board}</PlanFrame>
         </div>
-        <div className="mt-2">
+        <div className="mt-4">
           <Dossier {...dossierProps} layout="strip" />
         </div>
-        <div className="px-3 pt-3">{slip}</div>
+        <div className="px-3 pt-4">{slip}</div>
       </div>
       <div className="fixed inset-x-0 bottom-0 z-40">
         <Instruments {...instrumentsProps} layout="dock" />
@@ -872,69 +865,25 @@ export function CasePlayer(props: CasePlayerProps) {
   );
 }
 
-function IconMini({
-  label,
-  onClick,
-  disabled,
-  pressed,
-  children,
-}: {
-  label: string;
-  onClick: () => void;
-  disabled?: boolean;
-  /** toggle buttons: shown lit + aria-pressed */
-  pressed?: boolean;
-  children: ReactNode;
-}) {
+/** The district's identity swatch: a small square in its accent colour next to the title. */
+function DistrictSwatch() {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      aria-label={label}
-      aria-pressed={pressed}
-      title={label}
-      className={clsx(
-        'grid size-9 place-items-center rounded-full hover:bg-[var(--dk-hover,rgb(255_255_255/0.08))] hover:text-[var(--fp-ink)] disabled:opacity-35 focus-visible:outline-2 focus-visible:outline-[var(--fp-accent2)]',
-        pressed ? 'bg-[color-mix(in_srgb,var(--fp-accent)_22%,transparent)] text-[var(--fp-ink)] shadow-[inset_0_0_0_1px_var(--fp-accent)]' : 'text-[var(--fp-muted)]',
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
-/** ≤ 1.5° 3D tilt following the pointer (desktop only). */
-function TiltPlan({ children, disabled }: { children: ReactNode; disabled?: boolean }) {
-  const [t, setT] = useState({ x: 0, y: 0 });
-  return (
-    <motion.div
-      className="relative flex w-full justify-center"
-      onPointerMove={(e) => {
-        if (disabled || e.pointerType !== 'mouse') return;
-        const r = e.currentTarget.getBoundingClientRect();
-        const x = (e.clientX - r.left) / r.width - 0.5;
-        const y = (e.clientY - r.top) / r.height - 0.5;
-        setT({ x: -y * 1.5, y: x * 1.5 });
-      }}
-      onPointerLeave={() => setT({ x: 0, y: 0 })}
-      animate={{ rotateX: t.x, rotateY: t.y }}
-      transition={{ type: 'spring', stiffness: 120, damping: 20 }}
-      style={{ transformStyle: 'preserve-3d', filter: 'drop-shadow(0 40px 50px var(--dk-shadow, rgb(0 0 0 / 0.65)))' }}
-    >
-      {children}
-    </motion.div>
+    <span
+      aria-hidden
+      className="hidden size-3.5 shrink-0 self-start rounded-[2px] border-2 border-[var(--fp-ink)] lg:mt-1 lg:block"
+      style={{ background: 'var(--fp-district)' }}
+    />
   );
 }
 
 const SETTING_ROWS: { key: keyof FloorplanSettings; label: string; hint: string }[] = [
   { key: 'autoCross', label: 'Auto-cross', hint: 'Pinning someone crosses their row and column for everyone else.' },
-  { key: 'confirmLever', label: 'Confirm the lever', hint: 'Ask before closing the case.' },
-  { key: 'furnitureLabels', label: 'Name labels', hint: 'Tiny captions under every piece of furniture (zoom in on big plans).' },
+  { key: 'confirmLever', label: 'Confirm before closing', hint: 'Ask before closing the case.' },
+  { key: 'furnitureLabels', label: 'Name labels', hint: 'Small captions under every piece of furniture (zoom in on big plans).' },
   { key: 'showTimer', label: 'Show the timer', hint: 'Hide it if the clock makes you nervous.' },
-  { key: 'lampFollow', label: 'Lamp follows the cursor', hint: 'Desk lamp light and plan tilt follow your mouse.' },
+  { key: 'lampFollow', label: 'Torch follows the cursor', hint: 'A small circle of light on the plan follows your mouse.' },
   { key: 'sound', label: 'Sound effects', hint: 'Pins, pencils, stamps and fire.' },
-  { key: 'music', label: 'District ambience', hint: 'Rain, waves, clocks…' },
+  { key: 'music', label: 'District ambience', hint: 'Rain, waves, clocks.' },
 ];
 
 function SettingsSheet({ open, onClose, settings }: { open: boolean; onClose: () => void; settings: FloorplanSettings }) {
@@ -942,21 +891,21 @@ function SettingsSheet({ open, onClose, settings }: { open: boolean; onClose: ()
   return (
     <Overlay open={open} onClose={onClose} label="Desk settings">
       <div className="grid min-h-dvh place-items-center p-4">
-        <PanelBox className="w-full max-w-sm p-5">
-          <h2 className="font-display text-xl font-bold">Desk settings</h2>
-          <ul className="mt-4 space-y-3">
+        <div className={clsx(SHEET_CLASS, 'w-full max-w-sm p-5')}>
+          <h2 className="font-display text-2xl font-extrabold tracking-[-0.02em]">Desk settings</h2>
+          <ul className="mt-3 divide-y divide-[var(--fp-hair)] border-y border-[var(--fp-hair)]">
             {SETTING_ROWS.map((r) => (
               <li key={r.key}>
-                <label className="flex cursor-pointer items-start gap-3">
+                <label className="flex cursor-pointer items-start gap-3 py-2.5">
                   <input
                     type="checkbox"
                     checked={settings[r.key]}
                     onChange={(e) => set(r.key, e.target.checked)}
-                    className="mt-0.5 size-4 accent-[var(--fp-accent)]"
+                    className="mt-0.5 size-[18px] shrink-0 accent-[var(--fp-ink)]"
                   />
                   <span>
-                    <span className="block text-sm font-semibold">{r.label}</span>
-                    <span className="block text-xs text-[var(--fp-muted)]">{r.hint}</span>
+                    <span className="block text-[15px] font-semibold leading-tight">{r.label}</span>
+                    <span className="mt-0.5 block text-[13px] leading-snug text-[var(--fp-muted)]">{r.hint}</span>
                   </span>
                 </label>
               </li>
@@ -965,9 +914,8 @@ function SettingsSheet({ open, onClose, settings }: { open: boolean; onClose: ()
           <div className="mt-5 flex justify-end">
             <BrassBtn onClick={onClose}>Done</BrassBtn>
           </div>
-        </PanelBox>
+        </div>
       </div>
     </Overlay>
   );
 }
-

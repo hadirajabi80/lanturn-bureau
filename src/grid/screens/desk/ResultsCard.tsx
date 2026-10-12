@@ -8,6 +8,7 @@ import type { AccuseResult } from '@/grid/store';
 import { play, pushAchievementToasts } from './bridge';
 import { BrassBtn, GhostBtn } from './parts';
 import { formatTime } from './util';
+import { PRINT } from '@/grid/ui';
 
 export interface ResultAction {
   label: string;
@@ -66,36 +67,41 @@ export function ResultsCard({
         aria-label="Case closed — results"
         initial={{ y: 40, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: reduced ? 0 : 0.9, type: 'spring', stiffness: 260, damping: 28 }}
+        transition={{ delay: reduced ? 0 : 0.9, type: 'spring', stiffness: 420, damping: 32 }}
         className={['fp-panel fp-panel--glow', className].filter(Boolean).join(' ')}
       >
         <div className="p-5">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.3em] text-[var(--dk-accent-text,var(--fp-accent2))]">Case closed · {code}</div>
-          <h2 className="mt-1 font-display text-2xl font-black leading-tight text-[var(--fp-ink)]">{title}</h2>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center rounded-[4px] bg-[var(--fp-green)] px-1.5 text-[13px] font-bold leading-[20px] text-white shadow-[inset_0_0_0_1.5px_var(--fp-ink)]">
+              Case closed
+            </span>
+            <span className="font-mono text-[13px] font-medium text-[var(--fp-muted)]">{code}</span>
+          </div>
+          <h2 className="mt-2 font-display text-[26px] font-extrabold leading-[1.05] tracking-[-0.02em] text-[var(--fp-ink)]">{title}</h2>
 
-          <div className="mt-4 flex items-end justify-between gap-3">
+          <div className="mt-4 flex items-end justify-between gap-3 border-y border-[var(--fp-hair)] py-3">
             <div>
-              <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--fp-muted)]">Time</div>
-              <div className="font-mono text-3xl font-semibold tabular-nums text-[var(--fp-ink)]">{formatTime(result.timeMs)}</div>
-              <div className="text-[11px] text-[var(--fp-muted)]">
-                par {formatTime(parSeconds * 1000)}
-                {result.newBest && <span className="ml-1 font-semibold text-[var(--dk-accent-text,var(--fp-accent2))]">· new best</span>}
+              <div className="text-[13px] font-semibold text-[var(--fp-muted)]">Time</div>
+              <div className="font-mono text-3xl font-semibold leading-tight tabular-nums text-[var(--fp-ink)]">{formatTime(result.timeMs)}</div>
+              <div className="text-[13px] text-[var(--fp-muted)]">
+                Par <span className="font-mono">{formatTime(parSeconds * 1000)}</span>
+                {result.newBest && <span className="ml-1.5 rounded-[3px] bg-[var(--fp-hl)] px-1 font-semibold text-[var(--fp-ink)]">New best</span>}
               </div>
             </div>
             {showStars && (
-              <div className="flex items-center gap-1.5 pb-1" aria-label={`${result.stars} of 3 stars`}>
+              <div className="flex items-center gap-1 pb-1" aria-label={`${result.stars} of 3 stars`}>
                 {[0, 1, 2].map((i) => (
                   <motion.span
                     key={i}
-                    initial={reduced ? false : { scale: 2.2, opacity: 0, rotate: -20 }}
+                    initial={reduced ? false : { scale: 1.8, opacity: 0, rotate: -12 }}
                     animate={{ scale: 1, opacity: 1, rotate: 0 }}
-                    transition={{ delay: 1.2 + i * 0.22, type: 'spring', stiffness: 420, damping: 18 }}
+                    transition={{ delay: 1.2 + i * 0.18, type: 'spring', stiffness: 520, damping: 22 }}
                   >
                     <Star
                       aria-hidden
                       className="size-8"
-                      style={{ color: i < result.stars ? 'var(--fp-accent2)' : 'var(--dk-line, rgb(255 255 255 / 0.15))' }}
-                      fill={i < result.stars ? 'currentColor' : 'none'}
+                      strokeWidth={2}
+                      style={{ color: i < result.stars ? PRINT.ink : PRINT.grey, fill: i < result.stars ? PRINT.yellow : 'none' }}
                     />
                   </motion.span>
                 ))}
@@ -104,8 +110,8 @@ export function ResultsCard({
           </div>
 
           {reward && (
-            <div className="mt-4 rounded-[8px] bg-[var(--dk-shade,rgb(0_0_0/0.25))] p-3">
-              <div className="mb-1.5 text-[10px] uppercase tracking-[0.2em] text-[var(--fp-muted)]">Experience</div>
+            <div className="mt-3">
+              <div className="mb-1.5 text-[13px] font-semibold text-[var(--fp-muted)]">Experience</div>
               <XpCountUp breakdown={reward.breakdown} xpAfter={xpAfter} delay={reduced ? 0 : 1} />
             </div>
           )}

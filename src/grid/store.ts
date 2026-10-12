@@ -47,7 +47,8 @@ export type { Accusation, Deduction, RecordOutcome, Violation } from '@/grid/scr
 
 // ─────────────────────────── types ───────────────────────────
 
-export type DeskTool = 'pin' | 'pencil' | 'cross' | 'erase';
+/** 'empty' = "nobody can be here": crosses a square out for everyone at once (tap, or drag over several). */
+export type DeskTool = 'pin' | 'pencil' | 'cross' | 'empty' | 'erase';
 export type DeskPhase = 'placing' | 'accusing' | 'solved' | 'burned';
 
 export interface DeskSnapshot {
@@ -192,6 +193,13 @@ export interface FloorplanState {
   tap: (puzzle: Puzzle, cell: Cell, opts?: { all?: boolean; tool?: DeskTool }) => TapResult;
   /** long-press = cross that square for everyone (toggle) */
   longPress: (puzzle: Puzzle, cell: Cell) => TapResult;
+  /**
+   * "Nobody can be here" for a run of squares (a drag with the Empty tool): set every square to
+   * empty (`on`) or clear it. `continueStroke` merges into the previous edit so one drag = one undo step.
+   */
+  markEmpty: (puzzle: Puzzle, cells: Cell[], on: boolean, continueStroke?: boolean) => void;
+  /** Is this square crossed out for everyone? */
+  isEmptyMarked: (puzzle: Puzzle, cell: Cell) => boolean;
   toggleTick: (clueIndex: number) => void;
   toggleCleared: (personId: string) => void;
   askOtto: (puzzle: Puzzle) => Deduction | null;
@@ -554,18 +562,21 @@ export const useFloorplan = create<FloorplanState>()(
             return 'erased';
           }
 
+          // "nobody can be here": the Empty tool, or a long-press / Alt-click with the cross tool
+          if (tool === 'empty' || (tool === 'cross' && opts.all)) {
+            if (blocked) return 'blocked';
+            const everyone = puzzle.people.map((p) => p.id);
+            const list = a.marks.crosses[key] ?? [];
+            const allCrossed = everyone.every((id) => list.includes(id));
+            const crosses = { ...a.marks.crosses };
+            if (allCrossed) delete crosses[key];
+            else crosses[key] = everyone;
+            commit(edit(a, { marks: { ...a.marks, crosses } }));
+            return allCrossed ? 'uncrossed' : 'crossed';
+          }
+
           if (tool === 'cross') {
             if (blocked) return 'blocked';
-            if (opts.all) {
-              const everyone = puzzle.people.map((p) => p.id);
-              const list = a.marks.crosses[key] ?? [];
-              const allCrossed = everyone.every((id) => list.includes(id));
-              const crosses = { ...a.marks.crosses };
-              if (allCrossed) delete crosses[key];
-              else crosses[key] = everyone;
-              commit(edit(a, { marks: { ...a.marks, crosses } }));
-              return allCrossed ? 'uncrossed' : 'crossed';
-            }
             if (!sel) {
               if (occupant) {
                 set({ selectedPersonId: occupant });
@@ -628,6 +639,36 @@ export const useFloorplan = create<FloorplanState>()(
         },
 
         longPress: (puzzle, cell) => get().tap(puzzle, cell, { all: true, tool: 'cross' }),
+
+        markEmpty: (puzzle, cells, on, continueStroke = false) => {
+          const a = editable();
+          if (!a) return;
+          const everyone = puzzle.people.map((p) => p.id);
+          const crosses = { ...a.marks.crosses };
+          let changed = false;
+          for (const cell of cells) {
+            if (isBlocked(puzzle, cell)) continue;
+            const key = cellKey(cell);
+            const list = crosses[key] ?? [];
+            const all = everyone.every((id) => list.includes(id));
+            if (on && !all) {
+              crosses[key] = everyone;
+              changed = true;
+            } else if (!on && list.length) {
+              delete crosses[key];
+              changed = true;
+            }
+          }
+          if (!changed) return;
+          const marks = { ...a.marks, crosses };
+          // a drag is one undo step: later squares of the same stroke reuse the first snapshot
+          commit(continueStroke && a.undo.length ? { ...a, marks, redo: [] } : edit(a, { marks }));
+        },
+
+        isEmptyMarked: (puzzle, cell) => {
+          const list = get().active?.marks.crosses[cellKey(cell)] ?? [];
+          return list.length > 0 && puzzle.people.every((p) => list.includes(p.id));
+        },
 
         toggleTick: (clueIndex) => {
           const a = get().active;

@@ -3,7 +3,7 @@
  * Colours come from the district palette via <SkinProvider> → CSS vars --fp-*.
  * Data bridge for hub screens lives in ./bridge (not re-exported here on purpose).
  */
-export { SkinProvider, useSkin, skinVars, isLightDistrict, type SkinProviderProps, type SkinValue } from './skin';
+export { SkinProvider, useSkin, skinVars, isLightDistrict, PRINT, type SkinProviderProps, type SkinValue } from './skin';
 export { DeskBackground, type DeskBackgroundProps } from './DeskBackground';
 export {
   Panel,

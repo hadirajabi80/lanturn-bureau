@@ -57,6 +57,47 @@ function CrossMarkImpl({ k, r, c, color, width, small = false, reduceMotion }: C
 }
 export const CrossMark = memo(CrossMarkImpl);
 
+export interface EmptyMarkProps {
+  k: string;
+  r: number;
+  c: number;
+  /** the skin's note ink (contrasts with the sheet) */
+  ink: string;
+  /** the skin's note paper */
+  paper: string;
+  /** user-unit stroke width */
+  width: number;
+  reduceMotion: boolean;
+}
+
+/**
+ * "Nobody can be here": the square is greyed out with pencil hatching and a big ink X across it,
+ * so it reads as a dead square for every suspect (unlike the red per-person cross).
+ */
+function EmptyMarkImpl({ k, r, c, ink, paper, width, reduceMotion }: EmptyMarkProps): JSX.Element {
+  const [s1, s2] = crossStrokes(k + '!', 70);
+  const hatch = [12, 32, 52, 72, 92, 112, 132, 152].map((d) => `M${Math.max(4, d - 96)},${Math.min(96, d)}L${Math.min(96, d)},${Math.max(4, d - 96)}`).join('');
+  const draw = (delay: number) =>
+    reduceMotion
+      ? { initial: false as const, animate: { pathLength: 1, opacity: 1 } }
+      : {
+          initial: { pathLength: 0, opacity: 0 },
+          animate: { pathLength: 1, opacity: 1 },
+          transition: { pathLength: { duration: 0.14, delay, ease: 'easeOut' as const }, opacity: { duration: 0.01, delay } },
+        };
+  return (
+    <g transform={`translate(${c * 100} ${r * 100})`} pointerEvents="none">
+      <motion.g initial={reduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.12 }}>
+        <rect x={4} y={4} width={92} height={92} rx={4} fill={paper} fillOpacity={0.62} />
+        <path d={hatch} fill="none" stroke={ink} strokeOpacity={0.22} strokeWidth={width * 0.32} strokeLinecap="round" />
+      </motion.g>
+      <motion.path d={s1} fill="none" stroke={ink} strokeOpacity={0.85} strokeWidth={width * 0.85} strokeLinecap="round" {...draw(0)} />
+      <motion.path d={s2} fill="none" stroke={ink} strokeOpacity={0.85} strokeWidth={width * 0.85} strokeLinecap="round" {...draw(0.1)} />
+    </g>
+  );
+}
+export const EmptyMark = memo(EmptyMarkImpl);
+
 const CORNERS: Array<[number, number]> = [
   [0, 0],
   [1, 0],

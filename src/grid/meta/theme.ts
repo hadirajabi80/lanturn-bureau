@@ -1,40 +1,45 @@
 /**
- * Visual tokens for the meta screens. Reads the Floorplan design-system CSS variables (`--fp-*`)
- * when the hub/desk sets them, with Lantern Bureau fallbacks so widgets work anywhere.
+ * Visual tokens for the meta screens (v3 "printed case file", docs/PRINT-DESIGN.md).
+ * Reads the Floorplan design-system CSS variables (`--fp-*`) when a <SkinProvider> sets them,
+ * with the print palette as fallbacks so widgets also work in portals outside `.fp-root`.
  */
 import type { AchievementTier } from './types';
 
 export const FP = {
-  bg: 'var(--fp-bg, #0D0A08)',
-  panel: 'var(--fp-panel, #18130F)',
-  panel2: 'var(--fp-panel-2, #211A14)',
-  ink: 'var(--fp-ink, #F1E6D2)',
-  muted: 'var(--fp-muted, #A8977D)',
-  accent: 'var(--fp-accent, #D4A857)',
-  accent2: 'var(--fp-accent2, #FFB347)',
-  danger: 'var(--fp-danger, #C8323C)',
-  hair: 'color-mix(in srgb, var(--fp-accent, #D4A857) 18%, transparent)',
-  hairStrong: 'color-mix(in srgb, var(--fp-accent, #D4A857) 38%, transparent)',
-  display: 'var(--font-display, "Playfair Display", Georgia, serif)',
-  mono: 'var(--font-mono, "JetBrains Mono", ui-monospace, monospace)',
+  bg: 'var(--fp-bg, #F1F1EC)',
+  panel: 'var(--fp-panel, #FFFFFF)',
+  panel2: 'var(--fp-bg, #F1F1EC)',
+  ink: 'var(--fp-ink, #141414)',
+  muted: 'var(--fp-muted, #5E5E5A)',
+  accent: 'var(--fp-accent, #D7261E)',
+  accent2: 'var(--fp-accent2, #A51A14)',
+  danger: 'var(--fp-danger, #D7261E)',
+  hl: 'var(--fp-hl, #FFD84D)',
+  green: 'var(--fp-green, #1E8A4C)',
+  grey: '#C9C9C3',
+  hair: 'var(--fp-hair, #D9D9D2)',
+  hairStrong: 'var(--fp-ink, #141414)',
+  display: 'var(--font-display, "Archivo", system-ui, sans-serif)',
+  mono: 'var(--font-mono, "IBM Plex Mono", ui-monospace, monospace)',
 } as const;
 
+/** Achievement tiers: a printed spot colour per tier (used for a small swatch, never a wash). */
 export const METAL: Record<AchievementTier, { base: string; light: string; dark: string; label: string }> = {
-  bronze: { base: '#C0814F', light: '#E9B88A', dark: '#6E4022', label: 'Bronze' },
-  silver: { base: '#BCC6D1', light: '#F2F6FA', dark: '#5D6874', label: 'Silver' },
-  gold: { base: '#D9AE4C', light: '#FFE6A0', dark: '#7A5A1A', label: 'Gold' },
-  platinum: { base: '#9EE3E6', light: '#F0FFFF', dark: '#3C7F86', label: 'Platinum' },
+  bronze: { base: '#B4682E', light: '#F3DCC8', dark: '#141414', label: 'Bronze' },
+  silver: { base: '#8A9097', light: '#E6E8EA', dark: '#141414', label: 'Silver' },
+  gold: { base: '#E0A400', light: '#FFD84D', dark: '#141414', label: 'Gold' },
+  platinum: { base: '#2350D8', light: '#DCE4FA', dark: '#141414', label: 'Platinum' },
 };
 
-/** Panel surface style: panel colour, accent hairline, soft shadow, 10px corners (brief §1). */
+/** Static panel: white card, 2px ink border, 8px corners, no shadow. */
 export const panelStyle = {
   background: FP.panel,
-  boxShadow: `inset 0 0 0 1px ${FP.hair}, 0 18px 40px -24px rgba(0,0,0,0.85)`,
-  borderRadius: 10,
+  boxShadow: `inset 0 0 0 2px ${FP.ink}`,
+  borderRadius: 8,
 } as const;
 
 export const fmtTime = (ms: number | null | undefined): string => {
-  if (ms == null || !Number.isFinite(ms)) return '—';
+  if (ms == null || !Number.isFinite(ms)) return '–';
   const s = Math.round(ms / 1000);
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);

@@ -1,4 +1,3 @@
-import { Construction } from 'lucide-react';
 import { PageShell } from './PageShell';
 import { Panel } from './primitives';
 import { BrassButton } from './primitives';
@@ -12,11 +11,11 @@ export function PendingScreen({ title }: { title: string }) {
   return (
     <SkinProvider>
       <PageShell title={title} kicker="Floorplan Mysteries" back="/plans">
-        <Panel className="mx-auto mt-10 flex max-w-md flex-col items-center gap-3 p-8 text-center">
-          <Construction className="size-8 text-(--fp-hi)" aria-hidden />
-          <h2 className="font-display text-xl font-bold">This desk is still being set up</h2>
-          <p className="text-sm text-(--fp-muted)">The Bureau’s carpenters are working on “{title}”. Try again shortly.</p>
-          <BrassButton to="/plans" className="mt-2">
+        <Panel className="mx-auto mt-8 max-w-md p-6">
+          <p className="text-[13px] font-semibold text-(--fp-muted)">Not ready yet</p>
+          <h2 className="mt-0.5 border-b-2 border-(--fp-ink) pb-3 font-display text-2xl font-black leading-tight">This desk is still being set up</h2>
+          <p className="mt-3 text-[15px] text-(--fp-muted)">The Bureau’s carpenters are working on “{title}”. Try again shortly.</p>
+          <BrassButton to="/plans" className="mt-5">
             Back to the Bureau
           </BrassButton>
         </Panel>

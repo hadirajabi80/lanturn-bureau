@@ -23,7 +23,7 @@ export function WeeklyDesk() {
       backLabel="Back to modes"
       hud={
         best !== undefined ? (
-          <span className="hidden items-center gap-1.5 rounded-full border border-[var(--fp-hair)] px-3 py-1 font-mono text-xs text-[var(--dk-accent-text,var(--fp-accent2))] sm:inline-flex" title="Your best this week">
+          <span className="hidden h-9 items-center gap-1.5 rounded-[6px] border-2 border-[var(--fp-ink)] bg-[var(--fp-panel)] px-2.5 font-mono text-[13px] font-semibold text-[var(--fp-ink)] sm:inline-flex" title="Your best this week">
             <Trophy className="size-3.5" /> {formatTime(best)}
           </span>
         ) : null

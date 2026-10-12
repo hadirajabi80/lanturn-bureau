@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { create } from 'zustand';
 import clsx from 'clsx';
-import { AlertTriangle, CheckCircle2, Info, Sparkles, XCircle } from 'lucide-react';
+import { AlertTriangle, Check, Info, Search, X } from 'lucide-react';
 
 export type ToastKind = 'info' | 'success' | 'evidence' | 'error' | 'warn';
 
@@ -40,15 +40,16 @@ export function toast(message: ReactNode, kind: ToastKind = 'info', opts: { titl
   return useToasts.getState().push({ message, kind, title: opts.title, duration: opts.duration ?? DURATION[kind] });
 }
 
-const STYLE: Record<ToastKind, { icon: ReactNode; ring: string }> = {
-  info: { icon: <Info className="size-4 text-paper/70" />, ring: 'border-white/10' },
-  success: { icon: <CheckCircle2 className="size-4 text-teal" />, ring: 'border-teal/40' },
-  evidence: { icon: <Sparkles className="size-4 text-lantern" />, ring: 'border-lantern/50' },
-  error: { icon: <XCircle className="size-4 text-[#ff7b82]" />, ring: 'border-crimson/50' },
-  warn: { icon: <AlertTriangle className="size-4 text-brass" />, ring: 'border-brass/40' },
+/** Per kind: an icon on a small square swatch (the only colour in the toast). */
+const STYLE: Record<ToastKind, { icon: ReactNode; swatch: string }> = {
+  info: { icon: <Info className="size-4" strokeWidth={2.2} />, swatch: 'bg-print-card text-print-ink' },
+  success: { icon: <Check className="size-4" strokeWidth={3} />, swatch: 'bg-print-green text-white' },
+  evidence: { icon: <Search className="size-4" strokeWidth={2.4} />, swatch: 'bg-print-yellow text-print-ink' },
+  error: { icon: <X className="size-4" strokeWidth={3} />, swatch: 'bg-print-red text-white' },
+  warn: { icon: <AlertTriangle className="size-4" strokeWidth={2.2} />, swatch: 'bg-print-yellow text-print-ink' },
 };
 
-/** Mount once near the app root. */
+/** Mount once near the app root. White card, 2px ink border, hard shadow; tap to dismiss. */
 export function Toaster() {
   const items = useToasts((s) => s.items);
   const dismiss = useToasts((s) => s.dismiss);
@@ -64,20 +65,18 @@ export function Toaster() {
             key={t.id}
             layout
             onClick={() => dismiss(t.id)}
-            initial={{ opacity: 0, y: 16, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, x: 40, transition: { duration: 0.18 } }}
-            transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-            className={clsx(
-              'glass pointer-events-auto flex w-full max-w-sm items-start gap-2.5 rounded-xl border px-3.5 py-2.5 text-left text-sm text-paper',
-              STYLE[t.kind].ring,
-              t.kind === 'evidence' && 'shadow-[0_0_30px_-8px_rgb(255_179_71/0.6)]',
-            )}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, x: 32, transition: { duration: 0.14 } }}
+            transition={{ type: 'spring', stiffness: 520, damping: 36 }}
+            className="pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-lg bg-print-card px-3 py-2.5 text-left text-sm text-print-ink shadow-[inset_0_0_0_2px_#141414,3px_3px_0_#141414]"
           >
-            <span className="mt-0.5 shrink-0">{STYLE[t.kind].icon}</span>
+            <span className={clsx('mt-px grid size-6 shrink-0 place-items-center rounded shadow-[inset_0_0_0_1.5px_#141414]', STYLE[t.kind].swatch)}>
+              {STYLE[t.kind].icon}
+            </span>
             <span className="min-w-0">
-              {t.title && <span className="block font-semibold text-lantern">{t.title}</span>}
-              <span className="block leading-snug text-paper/90">{t.message}</span>
+              {t.title && <span className="block font-display font-extrabold leading-tight">{t.title}</span>}
+              <span className={clsx('block leading-snug', t.title ? 'text-print-muted' : 'text-print-ink')}>{t.message}</span>
             </span>
           </motion.button>
         ))}

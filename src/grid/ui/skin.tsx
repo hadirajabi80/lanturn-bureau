@@ -5,9 +5,11 @@ import { luminance } from '@/components/avatar/color';
 import './fp.css';
 
 /**
- * SkinProvider — the current district's palette as React context + CSS custom properties.
- * Sets `--fp-bg --fp-panel --fp-ink --fp-muted --fp-accent --fp-accent2 --fp-danger --fp-glow`
- * (plus `--fp-sheet --fp-wall`) on a wrapper element with class `fp-root`.
+ * SkinProvider — the current district as React context + CSS custom properties on a `.fp-root` wrapper.
+ * v3 "printed case file" (docs/PRINT-DESIGN.md): the UI chrome uses the same paper-and-ink palette in
+ * every district (`--fp-bg --fp-panel --fp-ink --fp-muted --fp-accent --fp-accent2 --fp-hl --fp-blue
+ * --fp-green --fp-danger`, legacy `--fp-glow`); the district only adds an identity swatch
+ * (`--fp-district --fp-district-bg`) and the board's own colours (`--fp-sheet --fp-wall`).
  * Defaults to Ashcombe Manor. Nest providers to re-skin a subtree.
  */
 
@@ -15,10 +17,26 @@ const DEFAULT_DISTRICT = DISTRICTS[0] as District;
 
 export interface SkinValue {
   district: District;
+  /** the district's own palette (board, facade art, identity swatches) */
   palette: SkinPalette;
-  /** bright daytime district (dark ink on light panels). */
+  /** bright daytime district (Sugar Lane etc.): flavour only, e.g. hearts instead of stars. The UI is always light. */
   light: boolean;
 }
+
+/** The printed-case-file UI palette (docs/PRINT-DESIGN.md), the same in every district. */
+export const PRINT = {
+  paper: '#F1F1EC',
+  card: '#FFFFFF',
+  ink: '#141414',
+  muted: '#5E5E5A',
+  rule: '#D9D9D2',
+  red: '#D7261E',
+  redInk: '#A51A14',
+  yellow: '#FFD84D',
+  blue: '#2350D8',
+  green: '#1E8A4C',
+  grey: '#C9C9C3',
+} as const;
 
 /** True for light-mood districts (flag, or a bright page background). */
 export const isLightDistrict = (d: District): boolean => d.mood === 'light' || (d.mood !== 'night' && luminance(d.palette.bg) > 0.45);
@@ -29,15 +47,23 @@ export const useSkin = (): SkinValue => useContext(SkinContext);
 
 /** CSS custom properties for a palette (usable as a `style` object anywhere). */
 export function skinVars(p: SkinPalette): CSSProperties {
+  // v3: the UI chrome is paper and ink in every district; the district adds an identity swatch
+  // (--fp-district, --fp-district-bg) and the board's own colours (--fp-sheet, --fp-wall).
   return {
-    '--fp-bg': p.bg,
-    '--fp-panel': p.panel,
-    '--fp-ink': p.ink,
-    '--fp-muted': p.muted,
-    '--fp-accent': p.accent,
-    '--fp-accent2': p.accent2,
-    '--fp-danger': p.danger,
-    '--fp-glow': p.glow,
+    '--fp-bg': PRINT.paper,
+    '--fp-panel': PRINT.card,
+    '--fp-ink': PRINT.ink,
+    '--fp-muted': PRINT.muted,
+    '--fp-accent': PRINT.red,
+    '--fp-accent2': PRINT.redInk,
+    '--fp-hi': PRINT.red,
+    '--fp-hl': PRINT.yellow,
+    '--fp-blue': PRINT.blue,
+    '--fp-green': PRINT.green,
+    '--fp-danger': PRINT.red,
+    '--fp-glow': PRINT.red,
+    '--fp-district': p.accent,
+    '--fp-district-bg': p.bg,
     '--fp-sheet': p.sheet,
     '--fp-wall': p.wall,
   } as CSSProperties;
@@ -60,7 +86,7 @@ export function SkinProvider({ district, children, className, style }: SkinProvi
         className={['fp-root', className].filter(Boolean).join(' ')}
         style={{ ...skinVars(d.palette), ...style }}
         data-district={d.id}
-        data-mood={value.light ? 'light' : 'night'}
+        data-district-mood={value.light ? 'light' : 'night'}
       >
         {children}
       </div>

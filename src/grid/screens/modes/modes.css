@@ -1,0 +1,114 @@
+/*
+ * Form controls for the mode screens (Blitz, Gauntlet, Zen, Custom), v3 "printed case file"
+ * (docs/PRINT-DESIGN.md): flat, ink-outlined, selected = yellow highlighter. Uses the --fp-* vars
+ * from <SkinProvider> with print fallbacks.
+ */
+
+/* Segmented control: joined cells on an ink ground; wraps on narrow screens without gaps. */
+.fpm-seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 6px;
+  background: var(--fp-ink, #141414);
+}
+.fpm-seg > button {
+  flex: 1 1 6rem;
+  min-height: 2.5rem;
+  padding: 0 0.75rem;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--fp-ink, #141414);
+  background: var(--fp-panel, #ffffff);
+  transition: background-color 0.1s;
+}
+.fpm-seg > button:hover { background: color-mix(in srgb, var(--fp-hl, #ffd84d) 40%, white); }
+.fpm-seg > button[aria-checked='true'],
+.fpm-seg > button[aria-selected='true'] {
+  font-weight: 700;
+  background: var(--fp-hl, #ffd84d);
+}
+
+/* Option tag (radio): white, ink outline; checked = highlighter; disabled = grey. */
+.fpm-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2.25rem;
+  padding: 0 0.75rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--fp-ink, #141414);
+  background: var(--fp-panel, #ffffff);
+  box-shadow: inset 0 0 0 1.5px var(--fp-ink, #141414);
+  transition: background-color 0.1s, transform 0.08s;
+}
+.fpm-opt:hover { background: color-mix(in srgb, var(--fp-hl, #ffd84d) 40%, white); }
+.fpm-opt:active { transform: translateY(1px); }
+.fpm-opt[aria-checked='true'] {
+  font-weight: 700;
+  background: var(--fp-hl, #ffd84d);
+  box-shadow: inset 0 0 0 2px var(--fp-ink, #141414);
+}
+.fpm-opt[aria-disabled='true'] {
+  color: #6b6b66;
+  background: #e4e4df;
+  box-shadow: inset 0 0 0 1.5px #c9c9c3;
+  cursor: not-allowed;
+}
+
+/* Text / number field. */
+.fpm-field {
+  height: 2.5rem;
+  border-radius: 6px;
+  padding: 0 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.9375rem;
+  color: var(--fp-ink, #141414);
+  background: var(--fp-panel, #ffffff);
+  box-shadow: inset 0 0 0 2px var(--fp-ink, #141414);
+}
+.fpm-field::placeholder { color: #8f8f89; }
+.fpm-field[aria-invalid='true'] { box-shadow: inset 0 0 0 2px var(--fp-accent, #d7261e); }
+
+/* Range slider: a ruled ink line with a square highlighter thumb. */
+.fpm-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 28px;
+  background: transparent;
+  cursor: pointer;
+}
+.fpm-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--fp-ink, #141414);
+}
+.fpm-range::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--fp-ink, #141414);
+}
+.fpm-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  margin-top: -9px;
+  border-radius: 4px;
+  background: var(--fp-hl, #ffd84d);
+  box-shadow: inset 0 0 0 2px var(--fp-ink, #141414), 2px 2px 0 var(--fp-ink, #141414);
+}
+.fpm-range::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--fp-hl, #ffd84d);
+  box-shadow: inset 0 0 0 2px var(--fp-ink, #141414), 2px 2px 0 var(--fp-ink, #141414);
+}
+.fpm-range:active::-webkit-slider-thumb { box-shadow: inset 0 0 0 2px var(--fp-ink, #141414); transform: translate(1px, 1px); }

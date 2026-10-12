@@ -13,7 +13,7 @@ export interface PanelProps extends HTMLAttributes<HTMLDivElement> {
   as?: 'div' | 'section' | 'article' | 'aside';
 }
 
-/** District-coloured surface: `--fp-panel`, 1px accent hairline at 18 %, soft shadow, 10 px corners. */
+/** White card with a 2px ink border (`glow` = the emphasised one, with a hard shadow). */
 export const Panel = forwardRef<HTMLDivElement, PanelProps>(function Panel(
   { tone = 'default', as: Tag = 'div', className, ...rest },
   ref,
@@ -75,9 +75,9 @@ function makeButton(base: string) {
   };
 }
 
-/** Primary: brass plate with engraved text and two screws. */
+/** Primary: flat red button with an ink border and a hard shadow (name kept from v2). */
 export const BrassButton = makeButton('fp-brass');
-/** Secondary: transparent with an accent hairline. */
+/** Secondary: white with an ink border. */
 export const GhostButton = makeButton('fp-ghost');
 
 // ───────────────────────────── Chip ─────────────────────────────
@@ -110,7 +110,7 @@ export function Chip({ active, icon, onClick, className, children, ...rest }: Ch
 export interface PlateProps extends HTMLAttributes<HTMLSpanElement> {
   dark?: boolean;
 }
-/** Small engraved label plate (mono, tracked caps). */
+/** Small label tag: yellow highlighter (or ink with `dark`). */
 export function Plate({ dark, className, ...rest }: PlateProps) {
   return <span className={cx('fp-plate', dark && 'fp-plate--dark', className)} {...rest} />;
 }
@@ -127,8 +127,8 @@ export interface MonoStatProps {
 export function MonoStat({ label, value, icon, className, align = 'left' }: MonoStatProps) {
   return (
     <div className={cx('flex min-w-0 flex-col gap-0.5', align === 'center' && 'items-center text-center', className)}>
-      <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-(--fp-muted)">{label}</span>
-      <span className="inline-flex items-center gap-1.5 font-mono text-base font-semibold tabular-nums text-(--fp-ink)">
+      <span className="text-xs font-semibold text-(--fp-muted)">{label}</span>
+      <span className="inline-flex items-center gap-1.5 font-mono text-lg font-semibold tabular-nums text-(--fp-ink)">
         {icon}
         {value}
       </span>
@@ -144,7 +144,7 @@ export interface ProgressFilamentProps {
   label?: string;
   style?: CSSProperties;
 }
-/** Thin glowing progress line with a pulsing bright tip. */
+/** Flat progress bar: red fill in an ink outline. */
 export function ProgressFilament({ value, className, label, style }: ProgressFilamentProps) {
   const v = Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
   return (
@@ -203,7 +203,7 @@ export interface KeyTagProps {
   style?: CSSProperties;
 }
 
-/** Brass key tag for a case: number, size badge, variant glyph, stars / in-progress pin / scorch. */
+/** Case index card: number, size badge, variant glyph, stars / in-progress pin / scorch. */
 export function KeyTag({ number, status, stars = 0, burns = 0, size, variant, title, to, onClick, className, style }: KeyTagProps) {
   const label = [
     `Case ${number}`,
@@ -224,10 +224,10 @@ export function KeyTag({ number, status, stars = 0, burns = 0, size, variant, ti
           <span className="fp-keytag__ember" aria-hidden />
         </>
       )}
-      <span className="font-mono text-[clamp(1.15rem,0.9rem+1vw,1.6rem)] font-semibold leading-none tracking-tight tabular-nums [text-shadow:0_1px_0_rgb(255_255_255/0.35)]">
+      <span className="font-display text-[clamp(1.25rem,0.95rem+1vw,1.75rem)] font-black leading-none tracking-tight tabular-nums">
         {String(number).padStart(2, '0')}
       </span>
-      <span className="mt-1.5 flex items-center gap-1 text-[10px] font-semibold opacity-80">
+      <span className="mt-1.5 flex items-center gap-1 text-[11px] font-semibold text-(--fp-muted)">
         {size ? <span className="font-mono">{size}×{size}</span> : null}
         {variant && variant !== 'classic' && <VariantGlyph variant={variant} size={12} />}
       </span>
@@ -235,14 +235,14 @@ export function KeyTag({ number, status, stars = 0, burns = 0, size, variant, ti
         {status === 'solved' ? (
           <StarRow stars={stars} size={11} />
         ) : status === 'progress' ? (
-          <MapPin className="size-3.5 fill-(--fp-danger) text-[#2a0c06]" aria-hidden strokeWidth={2} />
+          <MapPin className="size-3.5 fill-(--fp-danger) text-(--fp-ink)" aria-hidden strokeWidth={2} />
         ) : null}
       </span>
       {title && (
         <span
           aria-hidden
-          className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 w-max max-w-[11rem] -translate-x-1/2 rounded-md px-2 py-1 text-center font-display text-xs text-(--fp-ink) opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
-          style={{ background: 'var(--fp-panel)', boxShadow: 'inset 0 0 0 1px var(--fp-hair-strong), 0 8px 20px -8px #000' }}
+          className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 w-max max-w-[11rem] -translate-x-1/2 rounded-md px-2 py-1 text-center text-xs font-semibold text-(--fp-ink) opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
+          style={{ background: 'var(--fp-panel)', boxShadow: 'inset 0 0 0 1.5px var(--fp-ink), var(--fp-shadow)' }}
         >
           {title}
         </span>

@@ -1,19 +1,36 @@
 /**
- * Instruments: Pin / Pencil / Grease pencil / Rubber, Ask Otto, Reveal, Undo/Redo, the brass
- * timer and the CLOSE THE CASE lever. Column layout on desktop, a brass dock on phones.
+ * Instruments: the tools (Pin / Pencil / Cross / Nobody here / Rubber, data-driven from TOOLS), Ask Otto, Reveal,
+ * Undo/Redo, the timer and the "Close the case" button. A column rail on desktop, a bottom dock on phones.
+ * Printed look: white ink-outlined buttons, the current tool in yellow highlighter, the close button red.
  */
-import { useState, type ReactNode } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
+import { type ReactNode } from 'react';
 import clsx from 'clsx';
-import { Eraser, Eye, Lightbulb, MapPin, MessageCircleQuestion, Pencil, PenLine, Redo2, Stamp, Tag, Undo2 } from 'lucide-react';
+import { Ban, Eraser, Eye, Lightbulb, MapPin, MessageCircleQuestion, Pencil, PenLine, Redo2, Stamp, Tag, Undo2 } from 'lucide-react';
 import type { DeskTool } from '@/grid/store';
-import { MonoClock, useDeskMood } from './parts';
+import { DeskLabel, MonoClock } from './parts';
 
-export const TOOLS: { id: DeskTool; label: string; short: string; key: string; icon: typeof MapPin; hint: string }[] = [
+export interface ToolDef {
+  id: DeskTool;
+  /** full name (rail label, dock aria-label) */
+  label: string;
+  /** dock label */
+  short: string;
+  /** keyboard shortcut */
+  key: string;
+  icon: typeof MapPin;
+  /** rail aria-label / tooltip */
+  hint: string;
+  /** icon colour (e.g. red for marks that cross out) */
+  tint?: string;
+}
+
+/** The desk tools, in order. Add an entry here to get a button in both the rail and the dock, plus its shortcut. */
+export const TOOLS: ToolDef[] = [
   { id: 'pin', label: 'Brass pin', short: 'Pin', key: '1', icon: MapPin, hint: 'Pin the selected suspect onto a square' },
-  { id: 'pencil', label: 'Pencil', short: 'Pencil', key: '2', icon: Pencil, hint: 'Pencil a candidate note' },
-  { id: 'cross', label: 'Grease pencil', short: 'Cross', key: '3', icon: PenLine, hint: 'Red X for the selected suspect (Alt / long-press: everyone)' },
-  { id: 'erase', label: 'Rubber', short: 'Rubber', key: '4', icon: Eraser, hint: 'Erase pins and marks in a square' },
+  { id: 'pencil', label: 'Pencil', short: 'Pencil', key: '2', icon: Pencil, hint: 'Pencil a candidate note', tint: 'var(--fp-blue)' },
+  { id: 'cross', label: 'Grease pencil', short: 'Cross', key: '3', icon: PenLine, hint: 'Red X for the selected suspect only', tint: 'var(--fp-accent)' },
+  { id: 'empty', label: 'Nobody here', short: 'Nobody', key: '4', icon: Ban, hint: 'Nobody can be here: grey a square out for everyone (drag to mark several)' },
+  { id: 'erase', label: 'Rubber', short: 'Rubber', key: '5', icon: Eraser, hint: 'Erase pins and marks in a square' },
 ];
 
 export interface InstrumentsProps {
@@ -43,6 +60,10 @@ export interface InstrumentsProps {
   onToggleFurnitureLabels?: () => void;
 }
 
+const BTN_BASE =
+  'relative flex items-center rounded-[6px] border-2 border-[var(--fp-ink)] text-[var(--fp-ink)] transition-[background,transform] duration-100 active:translate-y-px ' +
+  'disabled:cursor-not-allowed disabled:border-[#9A9A94] disabled:bg-[var(--fp-grey,#C9C9C3)] disabled:text-[#6B6B66] disabled:active:translate-y-0';
+
 function ToolButton({
   active,
   disabled,
@@ -52,7 +73,6 @@ function ToolButton({
   kbd,
   children,
   compact,
-  danger,
 }: {
   active?: boolean;
   disabled?: boolean;
@@ -62,7 +82,6 @@ function ToolButton({
   kbd?: string;
   children: ReactNode;
   compact?: boolean;
-  danger?: boolean;
 }) {
   return (
     <button
@@ -73,60 +92,54 @@ function ToolButton({
       aria-label={title}
       title={kbd ? `${title} (${kbd})` : title}
       className={clsx(
-        'relative flex items-center rounded-[8px] transition-[background,box-shadow,color] duration-150 disabled:opacity-40',
-        'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--fp-accent2)]',
-        compact ? 'h-14 min-w-12 flex-1 flex-col justify-center gap-0.5 px-1' : 'h-11 w-full gap-3 px-3',
-        active
-          ? 'bg-[color-mix(in_srgb,var(--fp-accent)_22%,transparent)] text-[var(--fp-ink)] shadow-[inset_0_0_0_1px_var(--fp-accent)]'
-          : 'text-[var(--fp-muted)] hover:bg-[var(--dk-hover,rgb(255_255_255/0.06))] hover:text-[var(--fp-ink)]',
-        danger && active && 'text-[var(--fp-danger)]',
+        BTN_BASE,
+        compact ? 'h-14 min-w-0 flex-1 flex-col justify-center gap-0.5 px-0.5' : 'h-10 w-full gap-2.5 px-2.5',
+        active ? 'bg-[var(--fp-hl)]' : 'bg-[var(--fp-panel)] enabled:hover:bg-[var(--dk-hover)]',
       )}
     >
       {children}
-      <span className={clsx(compact ? 'text-[9px] font-semibold uppercase tracking-wider' : 'flex-1 text-left text-sm font-medium')}>
-        {label}
-      </span>
+      <span className={clsx(compact ? 'max-w-full truncate text-[12px] font-semibold leading-none' : 'flex-1 truncate text-left text-sm font-semibold')}>{label}</span>
       {kbd && !compact && (
-        <kbd className="rounded border border-[var(--dk-line,rgb(255_255_255/0.1))] px-1.5 font-mono text-[10px] text-[var(--fp-muted)]">{kbd}</kbd>
+        <kbd
+          className={clsx(
+            'grid h-5 min-w-5 place-items-center rounded-[3px] border-[1.5px] px-1 text-[12px] font-bold leading-none',
+            active ? 'border-[var(--fp-ink)] bg-[var(--fp-panel)]' : 'border-[var(--fp-hair)] text-[var(--fp-muted)]',
+          )}
+        >
+          {kbd}
+        </kbd>
       )}
     </button>
   );
 }
 
-
-/** Brass lever at night, a pink/mint candy lever in the light districts. */
-function leverSkin(light: boolean) {
-  return light
-    ? {
-        compactBg:
-          'repeating-linear-gradient(135deg, color-mix(in srgb, var(--fp-accent) 70%, white) 0 8px, white 8px 12px, color-mix(in srgb, var(--fp-accent2) 65%, white) 12px 20px, white 20px 24px)',
-        compactInk: 'text-[var(--fp-ink)]',
-        well: 'linear-gradient(180deg, color-mix(in srgb, var(--fp-accent) 10%, white), color-mix(in srgb, var(--fp-accent2) 14%, white))',
-        wellShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--fp-accent) 30%, transparent), inset 0 4px 10px color-mix(in srgb, var(--fp-accent) 18%, transparent)',
-        slot: 'color-mix(in srgb, var(--fp-ink) 22%, white)',
-        knob:
-          'radial-gradient(circle at 35% 30%, white 0 18%, transparent 19%), repeating-linear-gradient(120deg, var(--fp-accent) 0 7px, white 7px 11px, var(--fp-accent2) 11px 18px, white 18px 22px)',
-        knobBurned: 'linear-gradient(180deg, color-mix(in srgb, var(--fp-muted) 60%, white), var(--fp-muted))',
-        stem: 'linear-gradient(180deg, white, color-mix(in srgb, var(--fp-accent) 40%, white))',
-        ready: 'bg-[color-mix(in_srgb,var(--fp-accent)_75%,black)] text-white',
-        idleBadge: 'bg-white text-[var(--fp-muted)]',
-        radius: '999px',
-      }
-    : {
-        compactBg: 'linear-gradient(180deg,#f6dc9a,#c9974a 55%,#8b6224)',
-        compactInk: 'text-[#2b1b08]',
-        well: 'linear-gradient(180deg,#1a1410,#0c0907)',
-        wellShadow: 'inset 0 0 0 1px var(--fp-hair), inset 0 6px 14px rgb(0 0 0 / 0.8)',
-        slot: '#000',
-        knob: 'linear-gradient(180deg,#f6dc9a,#d6a752 45%,#8b6224)',
-        knobBurned: 'linear-gradient(180deg,#5b5047,#2b2420)',
-        stem: 'linear-gradient(180deg,#8b6224,#3c2a10)',
-        ready: 'bg-[#2c6b3a] text-white',
-        idleBadge: 'bg-[#1b1512] text-[var(--fp-muted)]',
-        radius: '6px',
-      };
+/** A small on/off line in the rail (checkbox look). */
+function Toggle({ on, onClick, icon, children, title }: { on: boolean; onClick: () => void; icon: ReactNode; children: ReactNode; title?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={on}
+      title={title}
+      className="flex w-full items-center gap-2 rounded-[4px] px-1 py-1 text-left text-[13px] text-[var(--fp-ink)] hover:bg-[var(--dk-hover)]"
+    >
+      <span
+        aria-hidden
+        className={clsx('grid size-4 shrink-0 place-items-center rounded-[3px] border-2 border-[var(--fp-ink)]', on ? 'bg-[var(--fp-ink)] text-white' : 'bg-[var(--fp-panel)]')}
+      >
+        {on && (
+          <svg viewBox="0 0 10 10" className="size-2.5">
+            <path d="M1.5 5.2 L4 7.5 L8.5 2.5" fill="none" stroke="currentColor" strokeWidth="2" />
+          </svg>
+        )}
+      </span>
+      <span className="text-[var(--fp-muted)]">{icon}</span>
+      <span className="min-w-0 flex-1">{children}</span>
+    </button>
+  );
 }
-/** The CLOSE THE CASE lever: a brass handle that is pulled down in its slot. */
+
+/** The "Close the case" control: a big red primary button with the pinned count. */
 export function Lever({
   onPull,
   disabled,
@@ -142,23 +155,12 @@ export function Lever({
   total: number;
   compact?: boolean;
 }) {
-  const reduced = useReducedMotion() ?? false;
-  const [pulling, setPulling] = useState(false);
   const ready = pinned === total;
-  const sk = leverSkin(useDeskMood() === 'light');
   const label =
     phase === 'accusing' ? 'Open the line-up' : phase === 'solved' ? 'Case closed' : phase === 'burned' ? 'Case burned' : 'Close the case';
   const pull = () => {
-    if (disabled || pulling) return;
-    if (phase === 'accusing' || reduced) {
-      onPull();
-      return;
-    }
-    setPulling(true);
-    window.setTimeout(() => {
-      onPull();
-      setPulling(false);
-    }, 380);
+    if (disabled) return;
+    onPull();
   };
 
   if (compact) {
@@ -168,19 +170,17 @@ export function Lever({
         onClick={pull}
         disabled={disabled}
         aria-label={`${label} (L)`}
-        className={clsx(
-          'relative flex h-14 min-w-[72px] flex-col items-center justify-center gap-0.5 rounded-[8px] px-2 disabled:opacity-45',
-          sk.compactInk,
-          'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--fp-accent2)]',
-        )}
-        style={{ background: sk.compactBg }}
+        className="fp-brass relative h-14 min-w-[76px] flex-col !gap-0.5 px-2"
       >
-        <motion.span animate={pulling ? { y: [0, 6, 0] } : { y: 0 }} transition={{ duration: 0.38 }}>
-          <Stamp className="size-5" />
-        </motion.span>
-        <span className="text-[9px] font-bold uppercase tracking-wider">{phase === 'accusing' ? 'Line-up' : 'Close'}</span>
+        <Stamp className="size-5" aria-hidden />
+        <span className="text-[12px] leading-none">{phase === 'accusing' ? 'Line-up' : 'Close'}</span>
         {phase === 'placing' && (
-          <span className={clsx('absolute -top-1.5 right-1 rounded-full px-1 font-mono text-[9px]', ready ? sk.ready : sk.idleBadge)}>
+          <span
+            className={clsx(
+              'absolute -top-2.5 right-1 rounded-[4px] border-[1.5px] border-[var(--fp-ink)] px-1 font-mono text-[12px] font-semibold leading-[16px]',
+              ready ? 'bg-[var(--fp-hl)] text-[var(--fp-ink)]' : 'bg-[var(--fp-panel)] text-[var(--fp-ink)]',
+            )}
+          >
             {pinned}/{total}
           </span>
         )}
@@ -189,55 +189,27 @@ export function Lever({
   }
 
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div className="flex flex-col gap-2">
+      {phase === 'placing' && (
+        <div className="flex items-baseline justify-between text-[13px]">
+          <span className="font-semibold text-[var(--fp-muted)]">Pinned</span>
+          <span className={clsx('rounded-[3px] px-1 font-mono font-semibold tabular-nums', ready ? 'bg-[var(--fp-hl)] text-[var(--fp-ink)]' : 'text-[var(--fp-ink)]')}>
+            {pinned}/{total}
+          </span>
+        </div>
+      )}
       <button
         type="button"
         onClick={pull}
         disabled={disabled}
         aria-label={`${label} (L)`}
         title={`${label} (L)`}
-        className="group relative h-36 w-20 rounded-[10px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--fp-accent2)] disabled:cursor-not-allowed disabled:opacity-50"
-        style={{ background: sk.well, boxShadow: sk.wellShadow }}
+        className="fp-brass min-h-13 w-full px-3 text-[17px] leading-tight"
       >
-        {/* slot */}
-        <span aria-hidden className="absolute bottom-4 left-1/2 top-4 w-2 -translate-x-1/2 rounded-full shadow-[inset_0_0_4px_rgb(0_0_0/0.6)]" style={{ background: sk.slot }} />
-        {/* handle */}
-        <motion.span
-          aria-hidden
-          className="absolute left-1/2 top-3 -ml-6 flex w-12 flex-col items-center"
-          animate={pulling ? { y: 74 } : { y: phase === 'accusing' || phase === 'solved' ? 74 : 0 }}
-          transition={pulling ? { type: 'spring', stiffness: 260, damping: 16 } : { duration: 0.3 }}
-        >
-          <span
-            className="h-7 w-12 group-hover:brightness-110"
-            style={{
-              background: phase === 'burned' ? sk.knobBurned : sk.knob,
-              borderRadius: sk.radius,
-              boxShadow: 'inset 0 1px 0 rgb(255 250 230 / 0.6), 0 6px 10px -4px var(--dk-shadow, rgb(0 0 0 / 0.9))',
-            }}
-          />
-          <span className="h-5 w-2 rounded-b" style={{ background: sk.stem }} />
-        </motion.span>
-        {phase === 'placing' && (
-          <span
-            aria-hidden
-            className={clsx(
-              'absolute bottom-1.5 left-1/2 -translate-x-1/2 rounded-full px-1.5 font-mono text-[10px]',
-              ready ? sk.ready : 'text-[var(--fp-muted)]',
-            )}
-          >
-            {pinned}/{total}
-          </span>
-        )}
+        <Stamp className="size-5 shrink-0" aria-hidden />
+        <span>{label}</span>
       </button>
-      <div className="text-center font-display text-[13px] font-bold uppercase leading-tight tracking-[0.18em] text-[var(--dk-accent-text,var(--fp-accent2))]">
-        {label}
-      </div>
-      {phase === 'placing' && !ready && (
-        <p className="max-w-[11rem] text-center text-[10px] leading-snug text-[var(--fp-muted)]">
-          Pulled early or wrong, the file burns.
-        </p>
-      )}
+      {phase === 'placing' && !ready && <p className="text-[12px] leading-snug text-[var(--fp-muted)]">Close it early or wrong and the file burns.</p>}
     </div>
   );
 }
@@ -248,24 +220,11 @@ export function Instruments(props: InstrumentsProps & { layout: 'column' | 'dock
     return (
       <nav
         aria-label="Instruments"
-        className="flex items-stretch gap-1 px-2 pb-[max(var(--safe-bottom),8px)] pt-2"
-        style={{
-          background: 'linear-gradient(180deg, color-mix(in srgb, var(--fp-panel) 92%, #000), var(--fp-panel))',
-          boxShadow: '0 -1px 0 var(--fp-hair), 0 -14px 30px -18px var(--dk-shadow, rgb(0 0 0 / 0.9))',
-        }}
+        className="flex items-stretch gap-1.5 border-t-2 border-[var(--fp-ink)] bg-[var(--fp-panel)] px-2 pb-[max(var(--safe-bottom),8px)] pt-3"
       >
         {TOOLS.map((t) => (
-          <ToolButton
-            key={t.id}
-            compact
-            active={tool === t.id}
-            disabled={disabled}
-            onClick={() => onTool(t.id)}
-            label={t.short}
-            title={t.label}
-            danger={t.id === 'cross'}
-          >
-            <t.icon className={clsx('size-5', t.id === 'cross' && 'text-[#e2554a]')} />
+          <ToolButton key={t.id} compact active={tool === t.id} disabled={disabled} onClick={() => onTool(t.id)} label={t.short} title={t.label}>
+            <t.icon className="size-5" style={disabled ? undefined : { color: t.tint }} />
           </ToolButton>
         ))}
         <ToolButton compact disabled={disabled || props.ottoLeft === 0} onClick={props.onOtto} label="Otto" title="Ask Otto">
@@ -279,80 +238,84 @@ export function Instruments(props: InstrumentsProps & { layout: 'column' | 'dock
   return (
     <nav aria-label="Instruments" className="flex h-full flex-col gap-3">
       {props.clock !== null && (
-        <MonoClock ms={props.clock} warn={props.clockWarn} label={props.clockLabel} className="text-lg" />
+        <div>
+          <DeskLabel className="mb-1">{props.clockLabel === 'Time remaining' ? 'Time left' : 'Time'}</DeskLabel>
+          <MonoClock ms={props.clock} warn={props.clockWarn} label={props.clockLabel} className="text-xl" />
+        </div>
       )}
-      <div className="space-y-1">
-        {TOOLS.map((t) => (
-          <ToolButton
-            key={t.id}
-            active={tool === t.id}
-            disabled={disabled}
-            onClick={() => onTool(t.id)}
-            label={t.label}
-            title={t.hint}
-            kbd={t.key}
-            danger={t.id === 'cross'}
-          >
-            <t.icon className={clsx('size-[18px] shrink-0', t.id === 'cross' && 'text-[#e2554a]')} />
-          </ToolButton>
-        ))}
-      </div>
-      <button
-        type="button"
-        onClick={props.onToggleCrossesAll}
-        aria-pressed={props.crossesAll}
-        className="flex items-center gap-2 rounded-[8px] px-3 py-1.5 text-left text-[11px] text-[var(--fp-muted)] hover:text-[var(--fp-ink)] focus-visible:outline-2 focus-visible:outline-[var(--fp-accent2)]"
-      >
-        <Eye className="size-3.5" /> Crosses: {props.crossesAll ? 'everyone' : 'selected only'}
-      </button>
-      {props.onToggleFurnitureLabels && (
-        <button
-          type="button"
-          onClick={props.onToggleFurnitureLabels}
-          aria-pressed={!!props.furnitureLabels}
-          title="Show the name of every piece of furniture on the plan"
-          className={clsx(
-            '-mt-2 flex items-center gap-2 rounded-[8px] px-3 py-1.5 text-left text-[11px] hover:text-[var(--fp-ink)] focus-visible:outline-2 focus-visible:outline-[var(--fp-accent2)]',
-            props.furnitureLabels ? 'text-[var(--fp-ink)]' : 'text-[var(--fp-muted)]',
+      <div>
+        <DeskLabel className="mb-1.5">Tools</DeskLabel>
+        <div className="space-y-1">
+          {TOOLS.map((t) => (
+            <ToolButton key={t.id} active={tool === t.id} disabled={disabled} onClick={() => onTool(t.id)} label={t.label} title={t.hint} kbd={t.key}>
+              <t.icon className="size-[18px] shrink-0" style={disabled ? undefined : { color: t.tint }} />
+            </ToolButton>
+          ))}
+        </div>
+        <div className="mt-2 space-y-0.5">
+          <Toggle on={props.crossesAll} onClick={props.onToggleCrossesAll} icon={<Eye className="size-3.5" />}>
+            Show everyone's crosses
+          </Toggle>
+          {props.onToggleFurnitureLabels && (
+            <Toggle
+              on={!!props.furnitureLabels}
+              onClick={props.onToggleFurnitureLabels}
+              icon={<Tag className="size-3.5" />}
+              title="Show the name of every piece of furniture on the plan"
+            >
+              Name labels
+            </Toggle>
           )}
-        >
-          <Tag className="size-3.5" /> Name labels: {props.furnitureLabels ? 'on' : 'off'}
-        </button>
-      )}
-      <div className="h-px bg-[var(--fp-hair)]" />
-      <div className="space-y-1">
-        <ToolButton disabled={disabled || props.ottoLeft === 0} onClick={props.onOtto} label={`Ask Otto${props.ottoLeft != null ? ` · ${props.ottoLeft} left` : props.ottoCount ? ` · ${props.ottoCount}` : ''}`} title="Ask Otto for the next deduction" kbd="O">
-          <MessageCircleQuestion className="size-[18px] shrink-0" />
-        </ToolButton>
-        {props.onReveal && (
-          <ToolButton disabled={disabled} onClick={props.onReveal} label={`Reveal${props.revealCount ? ` · ${props.revealCount}` : ''}`} title="Reveal one suspect (costs a star)" kbd="R">
-            <Lightbulb className="size-[18px] shrink-0" />
-          </ToolButton>
-        )}
-        <div className="flex gap-1">
-          <button
-            type="button"
-            onClick={props.onUndo}
-            disabled={disabled || !props.canUndo}
-            aria-label="Undo (U or Ctrl+Z)"
-            title="Undo (U / Ctrl+Z)"
-            className="grid h-10 flex-1 place-items-center rounded-[8px] text-[var(--fp-muted)] hover:bg-[var(--dk-hover,rgb(255_255_255/0.06))] hover:text-[var(--fp-ink)] disabled:opacity-35 focus-visible:outline-2 focus-visible:outline-[var(--fp-accent2)]"
-          >
-            <Undo2 className="size-[18px]" />
-          </button>
-          <button
-            type="button"
-            onClick={props.onRedo}
-            disabled={disabled || !props.canRedo}
-            aria-label="Redo (Shift+U or Ctrl+Y)"
-            title="Redo (Shift+U / Ctrl+Y)"
-            className="grid h-10 flex-1 place-items-center rounded-[8px] text-[var(--fp-muted)] hover:bg-[var(--dk-hover,rgb(255_255_255/0.06))] hover:text-[var(--fp-ink)] disabled:opacity-35 focus-visible:outline-2 focus-visible:outline-[var(--fp-accent2)]"
-          >
-            <Redo2 className="size-[18px]" />
-          </button>
         </div>
       </div>
-      <div className="mt-auto pt-2">
+      <div className="border-t border-[var(--fp-hair)] pt-3">
+        <DeskLabel className="mb-1.5">Help</DeskLabel>
+        <div className="space-y-1">
+          <ToolButton
+            disabled={disabled || props.ottoLeft === 0}
+            onClick={props.onOtto}
+            label={`Ask Otto${props.ottoLeft != null ? ` (${props.ottoLeft} left)` : props.ottoCount ? ` (${props.ottoCount})` : ''}`}
+            title="Ask Otto for the next deduction"
+            kbd="O"
+          >
+            <MessageCircleQuestion className="size-[18px] shrink-0" />
+          </ToolButton>
+          {props.onReveal && (
+            <ToolButton
+              disabled={disabled}
+              onClick={props.onReveal}
+              label={`Reveal${props.revealCount ? ` (${props.revealCount})` : ''}`}
+              title="Reveal one suspect (costs a star)"
+              kbd="R"
+            >
+              <Lightbulb className="size-[18px] shrink-0" />
+            </ToolButton>
+          )}
+          <div className="flex gap-1.5">
+            <button
+              type="button"
+              onClick={props.onUndo}
+              disabled={disabled || !props.canUndo}
+              aria-label="Undo (U or Ctrl+Z)"
+              title="Undo (U / Ctrl+Z)"
+              className={clsx(BTN_BASE, 'h-9 flex-1 justify-center gap-1.5 bg-[var(--fp-panel)] text-sm font-semibold enabled:hover:bg-[var(--dk-hover)]')}
+            >
+              <Undo2 className="size-4" /> Undo
+            </button>
+            <button
+              type="button"
+              onClick={props.onRedo}
+              disabled={disabled || !props.canRedo}
+              aria-label="Redo (Shift+U or Ctrl+Y)"
+              title="Redo (Shift+U / Ctrl+Y)"
+              className={clsx(BTN_BASE, 'h-9 flex-1 justify-center gap-1.5 bg-[var(--fp-panel)] text-sm font-semibold enabled:hover:bg-[var(--dk-hover)]')}
+            >
+              <Redo2 className="size-4" /> Redo
+            </button>
+          </div>
+        </div>
+      </div>
+      <div className="mt-auto border-t-2 border-[var(--fp-ink)] pt-3">
         <Lever onPull={props.onLever} disabled={props.phase === 'solved' || props.phase === 'burned'} phase={props.phase} pinned={props.pinned} total={props.total} />
       </div>
     </nav>

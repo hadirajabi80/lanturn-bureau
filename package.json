@@ -11,7 +11,8 @@
     "grid:test": "tsx src/grid/engine/__tests__/run.ts",
     "grid:otto-test": "tsx src/grid/engine/__tests__/explain.ts",
     "pwa:icons": "node scripts/gen-icons.mjs",
-    "audio:smoke": "tsx src/grid/audio/__tests__/smoke.ts"
+    "audio:smoke": "tsx src/grid/audio/__tests__/smoke.ts",
+    "guide:test": "tsx src/grid/guide/__tests__/practice.ts"
   },
   "dependencies": {
     "canvas-confetti": "^1.9.3",

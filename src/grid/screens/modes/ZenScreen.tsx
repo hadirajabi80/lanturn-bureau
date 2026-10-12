@@ -3,11 +3,11 @@
  * and the file never burns: a wrong lever just highlights the first contradiction.
  */
 import { useState } from 'react';
-import { Feather, Shuffle } from 'lucide-react';
-import { getDistrict } from '@/grid/skins/districts';
+import { Shuffle } from 'lucide-react';
+import { getDistrict, TIER_INFO } from '@/grid/skins/districts';
 import { useFloorplan } from '@/grid/store';
 import type { Tier } from '@/grid/types';
-import { BrassButton, PageShell } from '@/grid/ui';
+import { BrassButton, PageShell, SkinProvider } from '@/grid/ui';
 import { generatePuzzle } from '../desk/bridge';
 import { CasePlayer } from '../desk/CasePlayer';
 import { DeskLoading, DeskMissing, useGeneratedPuzzle } from '../desk/loading';
@@ -53,31 +53,40 @@ export function ZenScreen() {
   }
 
   return (
-    <PageShell title="Zen" kicker="Modes · no clock, no fire" back="/plans/modes" backLabel="Back to modes">
-      <div className="mx-auto max-w-4xl space-y-6 px-4 py-8 sm:px-6">
-        <div className="fp-panel flex items-start gap-3 p-5">
-          <Feather className="mt-1 size-6 shrink-0 text-[var(--dk-accent-text,var(--fp-accent2))]" />
-          <div className="text-sm leading-relaxed">
-            <p className="font-display text-xl font-bold">Take your time.</p>
-            <p className="mt-1 text-[var(--fp-muted)]">
-              No timer and no stars. Otto answers as often as you like, and a wrong lever never burns the file — it only points at the
-              first contradiction. {zenSolved > 0 && <>You have closed {zenSolved} {zenSolved === 1 ? 'case' : 'cases'} in Zen.</>}
+    <SkinProvider>
+      <PageShell title="Zen" kicker="Modes · no clock, no fire" back="/plans/modes" backLabel="Back to modes">
+        <div className="mx-auto max-w-4xl space-y-7 py-2 sm:py-6">
+          <div className="max-w-2xl">
+            <h2 className="font-display text-[clamp(1.6rem,1.2rem+1.5vw,2.2rem)] font-black leading-[1.05] tracking-[-0.02em]">Take your time.</h2>
+            <p className="mt-2 text-[15px] leading-relaxed text-(--fp-muted)">
+              No timer and no stars. Otto answers as often as you like, and a wrong lever never burns the file. It only points at the
+              first contradiction.
             </p>
+            {zenSolved > 0 && (
+              <p className="mt-3">
+                <span className="fp-plate">
+                  <span className="font-mono">{zenSolved}</span> {zenSolved === 1 ? 'case' : 'cases'} closed in Zen
+                </span>
+              </p>
+            )}
+          </div>
+          <Section n={1} title="District">
+            <DistrictPicker value={district} onChange={setDistrict} />
+          </Section>
+          <Section n={2} title="Tier">
+            <TierPicker value={tier} onChange={setTier} />
+          </Section>
+          <div className="flex flex-wrap items-center gap-3 border-t-2 border-(--fp-ink) pt-5">
+            <BrassButton size="lg" onClick={() => roll()} icon={<Shuffle className="size-4" />}>
+              Open a random case
+            </BrassButton>
+            <span className="text-sm text-(--fp-muted)">
+              {getDistrict(district)?.name} · {TIER_INFO[tier].name}
+            </span>
           </div>
         </div>
-        <Section title="District">
-          <DistrictPicker value={district} onChange={setDistrict} />
-        </Section>
-        <Section title="Tier">
-          <TierPicker value={tier} onChange={setTier} />
-        </Section>
-        <div className="flex flex-wrap gap-2">
-          <BrassButton size="lg" onClick={() => roll()} icon={<Shuffle className="size-4" />}>
-            Open a random case
-          </BrassButton>
-        </div>
-      </div>
-    </PageShell>
+      </PageShell>
+    </SkinProvider>
   );
 }
 

@@ -1,6 +1,6 @@
 /**
  * PWA chrome for Floorplan Mysteries: service-worker registration (production only),
- * "New version — reload" toast, one-time "ready offline" note, install chip
+ * "A new version is ready" toast, one-time "ready offline" note, install chip
  * (`beforeinstallprompt`), and an offline indicator.
  *
  * Wiring (App): render `<PwaRoot />` once, anywhere inside the app root.
@@ -145,13 +145,15 @@ function readDismissed(): boolean {
   }
 }
 
+/** v3 printed palette (docs/PRINT-DESIGN.md). These prompts live outside `.fp-root`, so colours are literal. */
 const C = {
-  panel: '#1E1813',
-  ink: '#F1E6D2',
-  muted: '#A8977D',
-  brass: '#C9974A',
-  brass2: '#E7C27D',
-  danger: '#B5402F',
+  card: '#FFFFFF',
+  ink: '#141414',
+  muted: '#5E5E5A',
+  red: '#D7261E',
+  redInk: '#A51A14',
+  yellow: '#FFD84D',
+  blue: '#2350D8',
 };
 
 const CSS = `
@@ -159,39 +161,57 @@ const CSS = `
 .pwa-layer.bottom{bottom:calc(16px + env(safe-area-inset-bottom,0px))}
 .pwa-layer.top{top:calc(10px + env(safe-area-inset-top,0px))}
 .pwa-card{pointer-events:auto;display:flex;align-items:center;gap:12px;max-width:min(440px,100%);
-  background:${C.panel};color:${C.ink};border-radius:10px;padding:10px 12px 10px 14px;
-  box-shadow:0 12px 32px rgba(0,0,0,.45),inset 0 0 0 1px rgba(201,151,74,.28);
-  font:500 14px/1.3 Inter,system-ui,sans-serif;animation:pwa-in .32s cubic-bezier(.2,.9,.3,1.2) both}
-.pwa-btn{appearance:none;border:0;cursor:pointer;border-radius:7px;padding:7px 12px;font:600 13px/1 Inter,system-ui,sans-serif;
-  color:#1A120A;background:linear-gradient(180deg,${C.brass2},${C.brass});box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 1px 0 rgba(0,0,0,.4);white-space:nowrap}
-.pwa-btn:focus-visible,.pwa-x:focus-visible,.pwa-chip:focus-visible{outline:2px solid ${C.brass2};outline-offset:2px}
-.pwa-x{appearance:none;border:0;background:transparent;color:${C.muted};cursor:pointer;padding:4px;line-height:0;border-radius:6px}
-.pwa-x:hover{color:${C.ink}}
-.pwa-pill{pointer-events:auto;display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;
-  background:rgba(30,24,19,.92);color:${C.ink};font:600 12px/1 Inter,system-ui,sans-serif;letter-spacing:.02em;
-  box-shadow:inset 0 0 0 1px rgba(181,64,47,.55),0 6px 18px rgba(0,0,0,.4);animation:pwa-in .3s ease-out both}
-.pwa-dot{width:7px;height:7px;border-radius:50%;background:${C.danger};box-shadow:0 0 8px ${C.danger}}
-.pwa-chip-wrap{position:fixed;right:calc(16px + env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:69;display:flex;align-items:center;gap:2px;animation:pwa-in .35s ease-out both}
-.pwa-chip{appearance:none;cursor:pointer;display:flex;align-items:center;gap:8px;border:0;border-radius:999px;padding:8px 14px 8px 10px;
-  background:${C.panel};color:${C.brass2};font:600 13px/1 Inter,system-ui,sans-serif;
-  box-shadow:inset 0 0 0 1px rgba(201,151,74,.45),0 8px 22px rgba(0,0,0,.45)}
-.pwa-chip:hover{box-shadow:inset 0 0 0 1px ${C.brass},0 8px 22px rgba(0,0,0,.45)}
-@keyframes pwa-in{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}
+  background:${C.card};color:${C.ink};border-radius:8px;padding:10px 10px 10px 12px;
+  box-shadow:inset 0 0 0 2px ${C.ink},3px 3px 0 ${C.ink};
+  font:500 15px/1.3 var(--font-body,"IBM Plex Sans",system-ui,sans-serif);animation:pwa-in .2s cubic-bezier(.2,.9,.3,1.1) both}
+.pwa-icon{display:grid;place-items:center;flex:none;width:28px;height:28px;border-radius:4px;background:${C.yellow};color:${C.ink};box-shadow:inset 0 0 0 1.5px ${C.ink}}
+.pwa-btn{appearance:none;border:0;cursor:pointer;border-radius:6px;padding:8px 14px;white-space:nowrap;
+  font:800 14px/1 var(--font-display,"Archivo",system-ui,sans-serif);color:#fff;background:${C.red};
+  box-shadow:inset 0 0 0 2px ${C.ink},3px 3px 0 ${C.ink};transition:transform .08s,box-shadow .08s,background .12s}
+.pwa-btn:hover{transform:translate(-1px,-1px);box-shadow:inset 0 0 0 2px ${C.ink},4px 4px 0 ${C.ink}}
+.pwa-btn:active{transform:translate(3px,3px);box-shadow:inset 0 0 0 2px ${C.ink};background:${C.redInk}}
+.pwa-btn:focus-visible,.pwa-x:focus-visible,.pwa-chip:focus-visible{outline:3px solid ${C.blue};outline-offset:2px}
+.pwa-x{appearance:none;border:0;background:transparent;color:${C.ink};cursor:pointer;padding:6px;line-height:0;border-radius:6px}
+.pwa-x:hover{background:#F1F1EC}
+.pwa-pill{pointer-events:auto;display:flex;align-items:center;gap:8px;padding:7px 12px;border-radius:6px;
+  background:${C.card};color:${C.ink};font:600 13px/1 var(--font-body,"IBM Plex Sans",system-ui,sans-serif);
+  box-shadow:inset 0 0 0 2px ${C.ink};animation:pwa-in .2s ease-out both}
+.pwa-dot{width:8px;height:8px;border-radius:50%;background:${C.red}}
+.pwa-chip-wrap{position:fixed;right:calc(16px + env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:69;display:flex;align-items:center;gap:4px;
+  padding:3px;border-radius:8px;background:${C.card};box-shadow:inset 0 0 0 2px ${C.ink},3px 3px 0 ${C.ink};animation:pwa-in .2s ease-out both}
+.pwa-chip{appearance:none;cursor:pointer;display:flex;align-items:center;gap:8px;border:0;border-radius:5px;padding:7px 10px 7px 8px;
+  background:transparent;color:${C.ink};font:700 14px/1 var(--font-body,"IBM Plex Sans",system-ui,sans-serif)}
+.pwa-chip:hover{background:${C.yellow}}
+@keyframes pwa-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.pwa-card,.pwa-pill,.pwa-chip-wrap{animation:none}}
 `;
 
-const Lantern = ({ size = 18 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="3.5" r="1.6" />
-    <path d="M9 6.5h6l1.5 2h-9z" />
-    <rect x="8" y="8.5" width="8" height="10" rx="1.2" />
-    <path d="M12 11.5c1 1.4 1.2 2.4.6 3.3-.4.6-.8.6-1.2 0-.6-.9-.4-1.9.6-3.3z" fill="currentColor" stroke="none" />
-    <path d="M7 18.5h10l-1.2 2H8.2z" />
+/** Refresh arrow (new version). */
+const Refresh = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M20 11a8 8 0 1 0-2.3 5.7" />
+    <path d="M20 4v7h-7" />
+  </svg>
+);
+
+/** Tick (saved offline). */
+const Tick = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M5 12.5l4.5 4.5L19 7.5" />
+  </svg>
+);
+
+/** Arrow into a tray (install). */
+const Install = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 3v11" />
+    <path d="M7.5 9.5L12 14l4.5-4.5" />
+    <path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4" />
   </svg>
 );
 
 const Close = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+  <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
     <path d="M6 6l12 12M18 6L6 18" />
   </svg>
 );
@@ -223,7 +243,7 @@ export function PwaRoot(): JSX.Element {
         <div className="pwa-layer top" role="status" aria-live="polite">
           <div className="pwa-pill">
             <span className="pwa-dot" />
-            Offline — your casebook still works
+            Offline. Your casebook still works.
           </div>
         </div>
       )}
@@ -231,10 +251,10 @@ export function PwaRoot(): JSX.Element {
       <div className="pwa-layer bottom" aria-live="polite">
         {showUpdate && (
           <div className="pwa-card" role="alert">
-            <span style={{ color: C.brass2, display: 'flex' }}>
-              <Lantern />
+            <span className="pwa-icon">
+              <Refresh />
             </span>
-            <span style={{ flex: 1 }}>New version — reload</span>
+            <span style={{ flex: 1 }}>A new version is ready.</span>
             <button type="button" className="pwa-btn" onClick={() => window.location.reload()}>
               Reload
             </button>
@@ -245,10 +265,10 @@ export function PwaRoot(): JSX.Element {
         )}
         {offlineReady && !showUpdate && (
           <div className="pwa-card" role="status">
-            <span style={{ color: C.brass2, display: 'flex' }}>
-              <Lantern />
+            <span className="pwa-icon">
+              <Tick />
             </span>
-            <span style={{ flex: 1 }}>Casebook saved for offline play</span>
+            <span style={{ flex: 1 }}>Casebook saved for offline play.</span>
             <button type="button" className="pwa-x" aria-label="Dismiss" onClick={dismissOfflineReady}>
               <Close />
             </button>
@@ -259,7 +279,7 @@ export function PwaRoot(): JSX.Element {
       {canInstall && !installDismissed && !showUpdate && (
         <div className="pwa-chip-wrap">
           <button type="button" className="pwa-chip" onClick={() => void install()}>
-            <Lantern size={16} />
+            <Install />
             Install app
           </button>
           <button type="button" className="pwa-x" aria-label="Not now" onClick={dismissInstall}>

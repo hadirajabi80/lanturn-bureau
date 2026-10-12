@@ -12,32 +12,28 @@ export interface ButtonProps extends Omit<HTMLMotionProps<'button'>, 'children'>
   icon?: ReactNode;
   iconRight?: ReactNode;
   loading?: boolean;
-  /** Gentle lantern hum (used on hero calls-to-action). */
+  /** Legacy v2 prop (idle lantern hum). Ignored: the printed UI has no idle animation. */
   hum?: boolean;
   block?: boolean;
   children?: ReactNode;
 }
 
+/** v3 printed buttons (docs/PRINT-DESIGN.md): flat fills, 2px ink border, hard shadow only on the primary. */
 const VARIANTS: Record<ButtonVariant, string> = {
   primary:
-    'bg-gradient-to-b from-[#e7c47c] via-brass to-[#a9833d] text-ink border border-[#f3d99a]/60 ' +
-    'shadow-[inset_0_1px_0_rgb(255_255_255/0.45),0_10px_24px_-12px_rgb(212_168_87/0.9)] ' +
-    'hover:brightness-110 disabled:brightness-75',
-  ghost:
-    'bg-transparent text-paper border border-paper/15 hover:border-brass/60 hover:text-lantern hover:bg-brass/5',
-  danger:
-    'bg-gradient-to-b from-[#de4a52] to-crimson text-paper border border-[#ff8a8f]/30 ' +
-    'shadow-[inset_0_1px_0_rgb(255_255_255/0.25),0_10px_24px_-12px_rgb(200_50_60/0.9)] hover:brightness-110',
-  subtle: 'bg-fog-2/70 text-paper border border-white/5 hover:bg-fog-3/80 hover:border-brass/30',
-  teal:
-    'bg-gradient-to-b from-[#4fd8cb] to-teal text-ink border border-[#9ff0e8]/40 ' +
-    'shadow-[inset_0_1px_0_rgb(255_255_255/0.4),0_10px_24px_-12px_rgb(46_196_182/0.9)] hover:brightness-110',
+    'bg-print-red text-white font-display font-extrabold shadow-[inset_0_0_0_2px_#141414,3px_3px_0_#141414] ' +
+    'hover:shadow-[inset_0_0_0_2px_#141414,4px_4px_0_#141414] hover:-translate-x-px hover:-translate-y-px ' +
+    'active:translate-x-[3px] active:translate-y-[3px] active:bg-print-red-ink active:shadow-[inset_0_0_0_2px_#141414]',
+  ghost: 'bg-print-card text-print-ink shadow-[inset_0_0_0_2px_#141414] hover:bg-[#FFEFA6]',
+  danger: 'bg-print-card text-print-red-ink shadow-[inset_0_0_0_2px_#D7261E] hover:bg-[#FBE3E1]',
+  subtle: 'bg-print-paper text-print-ink shadow-[inset_0_0_0_1.5px_#D9D9D2] hover:shadow-[inset_0_0_0_1.5px_#141414]',
+  teal: 'bg-print-blue text-white shadow-[inset_0_0_0_2px_#141414] hover:brightness-110',
 };
 
 const SIZES: Record<ButtonSize, string> = {
-  sm: 'h-8 px-3 text-xs gap-1.5 rounded-lg',
-  md: 'h-10 px-4 text-sm gap-2 rounded-xl',
-  lg: 'h-12 px-6 text-base gap-2.5 rounded-xl',
+  sm: 'h-8 px-3 text-xs gap-1.5 rounded-md',
+  md: 'h-10 px-4 text-sm gap-2 rounded-md',
+  lg: 'h-12 px-6 text-base gap-2.5 rounded-md',
 };
 
 export function Button({
@@ -54,20 +50,17 @@ export function Button({
   type = 'button',
   ...rest
 }: ButtonProps) {
+  void hum;
   const isDisabled = disabled || loading;
   return (
     <motion.button
       type={type}
       disabled={isDisabled}
-      whileTap={isDisabled ? undefined : { scale: 0.96 }}
-      whileHover={isDisabled ? undefined : { y: -1 }}
-      transition={{ type: 'spring', stiffness: 500, damping: 30 }}
       className={clsx(
-        'relative inline-flex select-none items-center justify-center font-semibold tracking-wide transition-[filter,background-color,border-color,color] duration-200',
-        'disabled:cursor-not-allowed disabled:opacity-50',
+        'relative inline-flex select-none items-center justify-center font-semibold transition-[transform,box-shadow,background-color] duration-100',
+        'disabled:cursor-not-allowed disabled:translate-x-0 disabled:translate-y-0 disabled:bg-print-grey disabled:text-[#6B6B66] disabled:shadow-[inset_0_0_0_2px_#9A9A94]',
         VARIANTS[variant],
         SIZES[size],
-        hum && !isDisabled && 'animate-hum',
         block && 'w-full',
         className,
       )}

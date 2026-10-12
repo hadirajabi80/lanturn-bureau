@@ -8,6 +8,7 @@ export interface XpFilamentProps {
   /** Start value for the fill animation (0..1). Defaults to `pct` (no animation) unless `animateFrom` given. */
   animateFrom?: number;
   height?: number;
+  /** Fill colour (default print red). */
   color?: string;
   className?: string;
   /** seconds */
@@ -15,33 +16,26 @@ export interface XpFilamentProps {
   delay?: number;
 }
 
-/** Thin glowing "lamp filament" XP bar. */
-export function XpFilament({ pct, animateFrom, height = 4, color = FP.accent2, className, duration = 1.1, delay = 0 }: XpFilamentProps) {
+/** Plain printed XP bar: white track in an ink outline, flat fill. */
+export function XpFilament({ pct, animateFrom, height = 8, color = FP.accent, className, duration = 0.8, delay = 0 }: XpFilamentProps) {
   const reduced = useReduced();
   const to = Math.max(0, Math.min(1, pct));
   const from = animateFrom == null ? to : Math.max(0, Math.min(1, animateFrom));
+  const h = Math.max(6, height);
   return (
     <div
       className={className}
-      style={{ position: 'relative', height, borderRadius: height, background: 'rgba(255,255,255,0.07)', boxShadow: 'inset 0 1px 1px rgba(0,0,0,0.5)', overflow: 'visible' }}
+      style={{ position: 'relative', height: h, borderRadius: 3, background: FP.panel, boxShadow: `inset 0 0 0 1.5px ${FP.ink}`, overflow: 'hidden' }}
     >
       <motion.div
         initial={{ width: `${from * 100}%` }}
         animate={{ width: `${to * 100}%` }}
-        transition={reduced ? { duration: 0 } : { duration, delay, ease: [0.16, 1, 0.3, 1] }}
+        transition={reduced ? { duration: 0 } : { duration, delay, ease: [0.22, 1, 0.36, 1] }}
         style={{
-          position: 'absolute', inset: 0, right: 'auto', borderRadius: height,
-          background: `linear-gradient(90deg, color-mix(in srgb, ${color} 55%, transparent), ${color})`,
-          boxShadow: `0 0 ${height * 2}px ${color}, 0 0 ${height * 5}px color-mix(in srgb, ${color} 45%, transparent)`,
+          position: 'absolute', inset: 0, right: 'auto', borderRadius: 3, background: color,
+          boxShadow: to > 0 ? `inset 0 0 0 1.5px ${FP.ink}` : undefined,
         }}
-      >
-        <span
-          style={{
-            position: 'absolute', right: -1, top: '50%', width: height * 1.6, height: height * 1.6, transform: 'translate(25%, -50%)',
-            borderRadius: '50%', background: '#FFF4D6', boxShadow: `0 0 ${height * 3}px ${color}`, opacity: to > 0 ? 1 : 0,
-          }}
-        />
-      </motion.div>
+      />
     </div>
   );
 }

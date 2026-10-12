@@ -1,4 +1,4 @@
-/** Ask Otto: the chief's explained deduction, typed out, with an Apply button. */
+/** Ask Otto: the chief's explained deduction, typed out, with an Apply button. A white note card. */
 import { AnimatePresence, motion } from 'framer-motion';
 import clsx from 'clsx';
 import { X } from 'lucide-react';
@@ -28,7 +28,7 @@ export function OttoPanel({
       ? view.d.text
       : view?.kind === 'limit'
         ? 'Hm. You have had your two questions, Rookie. The rest is yours.'
-        : 'Hm. Nothing new to say from here. Check your pins against every sentence — then pull the lever.';
+        : 'Hm. Nothing new to say from here. Check your pins against every sentence. Then close the case.';
   const applyLabel =
     view?.kind === 'hint' ? (view.d.kind === 'place' ? 'Pin it' : view.d.kind === 'mistake' ? 'Unpin' : 'Cross it out') : '';
   return (
@@ -37,31 +37,30 @@ export function OttoPanel({
         <motion.div
           role="dialog"
           aria-label="Otto's deduction"
-          initial={{ y: 24, opacity: 0 }}
+          initial={{ y: 16, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          exit={{ y: 24, opacity: 0 }}
-          transition={{ type: 'spring', stiffness: 360, damping: 30 }}
-          className={clsx(
-            'flex gap-3 rounded-[10px] p-3 pr-9 shadow-[0_20px_40px_-18px_var(--dk-shadow,var(--dk-shadow,rgb(0_0_0/0.9)))]',
-            className,
-          )}
-          style={{ background: 'color-mix(in srgb, var(--fp-panel) 94%, #000)', boxShadow: 'inset 0 0 0 1px var(--fp-hair), 0 20px 40px -18px var(--dk-shadow, var(--dk-shadow, rgb(0 0 0 / 0.9)))' }}
+          exit={{ y: 16, opacity: 0 }}
+          transition={{ type: 'spring', stiffness: 520, damping: 36 }}
+          className={clsx('flex gap-3 rounded-[8px] bg-[var(--fp-panel)] p-3 pr-10 shadow-[inset_0_0_0_2px_var(--fp-ink),5px_5px_0_var(--fp-ink)]', className)}
         >
-          <div className="shrink-0 overflow-hidden rounded-full bg-[var(--dk-shade,#2a241e)] ring-2 ring-[var(--fp-accent)]/60">
+          <div className="shrink-0 self-start overflow-hidden rounded-[6px] border-2 border-[var(--fp-ink)] bg-[#E6E6DF]">
             {OTTO && <Avatar spec={OTTO.avatar} size={56} speaking mood="thinking" />}
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--dk-accent-text,var(--fp-accent2))]">Otto</div>
-            <p className="mt-0.5 min-h-[2.6em] font-mono text-[13px] leading-snug text-[var(--fp-ink)]">
+            <div className="flex items-baseline gap-2">
+              <span className="font-display text-[15px] font-extrabold tracking-[-0.01em] text-[var(--fp-ink)]">Otto</span>
+              <span className="text-[12px] font-semibold text-[var(--fp-muted)]">Chief inspector</span>
+            </div>
+            <p className="mt-0.5 min-h-[2.9em] text-[15px] leading-snug text-[var(--fp-ink)]">
               <Typewriter text={text} speed={14} />
             </p>
-            <div className="mt-2 flex gap-2">
+            <div className="mt-2.5 flex flex-wrap gap-2">
               {view.kind === 'hint' && (
-                <BrassBtn size="sm" onClick={onApply} data-autofocus>
+                <BrassBtn size="sm" onClick={onApply} data-autofocus className="!text-[13px]">
                   {applyLabel}
                 </BrassBtn>
               )}
-              <GhostBtn size="sm" onClick={onDismiss}>
+              <GhostBtn size="sm" onClick={onDismiss} className="!text-[13px]">
                 {view.kind === 'hint' ? 'I will do it myself' : 'Thanks'}
               </GhostBtn>
             </div>
@@ -70,9 +69,9 @@ export function OttoPanel({
             type="button"
             onClick={onDismiss}
             aria-label="Close Otto"
-            className="absolute right-2 top-2 grid size-7 place-items-center rounded-full text-[var(--fp-muted)] hover:bg-[var(--dk-hover,rgb(255_255_255/0.08))] hover:text-[var(--fp-ink)] focus-visible:outline-2 focus-visible:outline-[var(--fp-accent2)]"
+            className="absolute right-2.5 top-2.5 grid size-7 place-items-center rounded-[4px] text-[var(--fp-ink)] hover:bg-[var(--dk-hover)]"
           >
-            <X className="size-4" />
+            <X className="size-4" strokeWidth={2.5} />
           </button>
         </motion.div>
       )}

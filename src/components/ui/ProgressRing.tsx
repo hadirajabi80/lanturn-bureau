@@ -11,15 +11,8 @@ export interface ProgressRingProps {
   label?: string;
 }
 
-export function ProgressRing({
-  value,
-  size = 44,
-  stroke = 4,
-  color = 'var(--color-brass)',
-  track = 'rgb(255 255 255 / 0.08)',
-  children,
-  label,
-}: ProgressRingProps) {
+/** Flat progress ring: a red arc on a light rule-coloured track. */
+export function ProgressRing({ value, size = 44, stroke = 4, color = '#D7261E', track = '#D9D9D2', children, label }: ProgressRingProps) {
   const v = Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
@@ -42,16 +35,14 @@ export function ProgressRing({
           fill="none"
           stroke={color}
           strokeWidth={stroke}
-          strokeLinecap="round"
           strokeDasharray={c}
           initial={false}
           animate={{ strokeDashoffset: c * (1 - v) }}
-          transition={{ type: 'spring', stiffness: 80, damping: 18 }}
-          style={{ filter: `drop-shadow(0 0 4px ${color})` }}
+          transition={{ type: 'spring', stiffness: 260, damping: 30 }}
         />
       </svg>
       {children !== undefined && (
-        <div className="absolute inset-0 grid place-items-center text-[11px] font-semibold">{children}</div>
+        <div className="absolute inset-0 grid place-items-center font-mono text-[11px] font-semibold text-print-ink">{children}</div>
       )}
     </div>
   );

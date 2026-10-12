@@ -72,7 +72,7 @@ export const VARIANT_META: Record<Variant, VariantMeta> = {
   sniper: {
     name: 'Line of sight',
     icon: 'Crosshair',
-    blurb: 'Only the killer had a clear line to the victim — along a row, column or diagonal, with no blocking furniture between.',
+    blurb: 'Only the killer had a clear line to the victim: along a row, column or diagonal, with no blocking furniture between.',
     accuse: 'Name the killer.',
   },
   liar: {
@@ -90,7 +90,7 @@ export const VARIANT_META: Record<Variant, VariantMeta> = {
   liarDouble: {
     name: 'Double, with a liar',
     icon: 'Drama',
-    blurb: 'Two victims, two killers — and one of the killers lies in every sentence.',
+    blurb: 'Two victims, two killers. One of the killers lies in every sentence.',
     accuse: 'Match each victim to their killer.',
   },
   accompliceLiar: {
@@ -105,7 +105,7 @@ export const VARIANT_META: Record<Variant, VariantMeta> = {
 export function shareText(opts: { title: string; code: string; stars: number; timeMs: number; mode?: string }): string {
   const stars = '★'.repeat(opts.stars) + '☆'.repeat(Math.max(0, 3 - opts.stars));
   return [
-    `Floorplan Mysteries — ${opts.title}`,
+    `Floorplan Mysteries: ${opts.title}`,
     `Case ${opts.code}  ${stars}  ⏱ ${formatTime(opts.timeMs)}`,
     'Closed at the Lantern Bureau.',
   ].join('\n');

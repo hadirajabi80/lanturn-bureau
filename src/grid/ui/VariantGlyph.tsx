@@ -6,7 +6,7 @@ export const VARIANT_INFO: Record<Variant, { name: string; line: string; accuse:
   classic: { name: 'Classic', line: 'The victim was alone with the killer.', accuse: 'Name the killer' },
   accomplice: {
     name: 'Accomplice',
-    line: 'Two people shared the victim’s room — the killer stood closer.',
+    line: 'Two people shared the victim’s room. The killer stood closer.',
     accuse: 'Name the killer and the accomplice',
   },
   lockedRoom: {
@@ -16,16 +16,16 @@ export const VARIANT_INFO: Record<Variant, { name: string; line: string; accuse:
   },
   poison: {
     name: 'Poison',
-    line: 'The poison was in the furniture — the killer was the only one beside it.',
+    line: 'The poison was in the furniture. The killer was the only one beside it.',
     accuse: 'Name the killer',
   },
   sniper: { name: 'Sniper', line: 'Only the killer had a clear line of sight to the victim.', accuse: 'Name the killer' },
-  liar: { name: 'Liar', line: 'One suspect lies with every word — and the liar is the killer.', accuse: 'Name the killer' },
+  liar: { name: 'Liar', line: 'One suspect lies with every word, and the liar is the killer.', accuse: 'Name the killer' },
   double: { name: 'Double', line: 'Two victims, each alone with their own killer.', accuse: 'Match both killers to their victims' },
-  liarDouble: { name: 'Liar’s Double', line: 'Two victims, two killers — and one of the killers lies.', accuse: 'Name both killers' },
+  liarDouble: { name: 'Liar’s Double', line: 'Two victims, two killers, and one of the killers lies.', accuse: 'Name both killers' },
   accompliceLiar: {
     name: 'False Accomplice',
-    line: 'A killer, an accomplice — and the accomplice lies about everything.',
+    line: 'A killer, an accomplice, and the accomplice lies about everything.',
     accuse: 'Name the killer and the accomplice',
   },
 };

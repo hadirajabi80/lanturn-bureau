@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { Stamp, fireConfetti, useReduced } from '../../components/fx';
 import { RankInsignia } from './RankInsignia';
+import { SkinProvider } from '../ui/skin';
 import { FP } from './theme';
 import type { Rank, RankId } from './types';
 import { RANKS, RANK_BY_ID } from './xp';
@@ -71,93 +72,79 @@ export function RankUpCelebration({ from, to, onDone, autoCloseMs = 8000, onStam
       aria-modal="true"
       aria-label={`Promoted to ${b.name}`}
       className="fixed inset-0 flex overflow-y-auto px-4 pt-[calc(2rem+var(--safe-top))] pb-[calc(2rem+var(--safe-bottom))]"
-      style={{ zIndex: 8000, background: 'radial-gradient(ellipse at 50% 40%, rgba(40,28,14,0.92), rgba(5,4,3,0.97) 70%)', color: FP.ink }}
+      style={{ zIndex: 8000, background: 'rgb(20 20 20 / 0.45)', color: FP.ink }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
+      transition={{ duration: 0.15 }}
       onClick={() => doneRef.current()}
     >
-      {/* spotlight cone */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute left-1/2 top-0 h-[75vh] w-[min(720px,140vw)] -translate-x-1/2"
-        style={{ background: `conic-gradient(from 180deg at 50% 0%, transparent 160deg, ${b.color}22 172deg, ${b.color}33 180deg, ${b.color}22 188deg, transparent 200deg)`, filter: 'blur(6px)' }}
-      />
-      <div className="relative m-auto flex max-w-md flex-col items-center text-center" onClick={(e) => e.stopPropagation()}>
-        <motion.p
-          className="mb-4 text-[11px] uppercase tracking-[0.4em]"
-          style={{ fontFamily: FP.mono, color: FP.muted }}
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-        >
-          Lantern Bureau · Promotion
-        </motion.p>
+      <motion.div
+        className="relative m-auto flex w-full max-w-sm flex-col items-center px-6 pb-6 pt-5 text-center"
+        style={{ background: FP.panel, borderRadius: 8, boxShadow: `inset 0 0 0 2px ${FP.ink}, 5px 5px 0 ${FP.ink}` }}
+        initial={reduced ? { opacity: 0 } : { opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={reduced ? { duration: 0.12 } : { type: 'spring', stiffness: 520, damping: 34 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p className="self-stretch pb-2 text-left text-[13px] font-semibold" style={{ color: FP.muted, borderBottom: `1px solid ${FP.hair}` }}>
+          Lantern Bureau, personnel office
+        </p>
 
-        <div className="relative grid h-[200px] w-[200px] place-items-center" style={{ perspective: 800 }}>
-          {/* rotating rays */}
-          <motion.div
-            aria-hidden
-            className="absolute inset-[-40px] rounded-full"
-            style={{ background: `repeating-conic-gradient(from 0deg, ${b.color}26 0deg 6deg, transparent 6deg 18deg)`, maskImage: 'radial-gradient(circle, black 30%, transparent 70%)', WebkitMaskImage: 'radial-gradient(circle, black 30%, transparent 70%)' }}
-            initial={{ opacity: 0, rotate: 0 }}
-            animate={{ opacity: phase >= 1 ? 1 : 0, rotate: reduced ? 0 : 360 }}
-            transition={{ opacity: { duration: 0.6 }, rotate: { duration: 40, repeat: Infinity, ease: 'linear' } }}
-          />
+        <div className="relative mt-4 grid h-[168px] w-[168px] place-items-center" style={{ perspective: 800 }}>
           {phase === 0 && (
             <motion.div
               key="from"
               className="absolute"
-              initial={{ scale: 0.8, opacity: 0 }}
+              initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: 'spring', stiffness: 260, damping: 18 }}
+              transition={{ type: 'spring', stiffness: 420, damping: 26 }}
             >
-              <RankInsignia rank={a} size={150} />
+              <RankInsignia rank={a} size={132} />
             </motion.div>
           )}
           {phase === 1 && (
-            <motion.div key="flip" className="absolute" initial={{ rotateY: 0, scale: 1 }} animate={{ rotateY: 90, scale: 0.9, opacity: 0.4 }} transition={{ duration: 0.4, ease: 'easeIn' }}>
-              <RankInsignia rank={a} size={150} />
+            <motion.div key="flip" className="absolute" initial={{ rotateY: 0, scale: 1 }} animate={{ rotateY: 90, scale: 0.92, opacity: 0.4 }} transition={{ duration: 0.22, ease: 'easeIn' }}>
+              <RankInsignia rank={a} size={132} />
             </motion.div>
           )}
           {phase === 2 && (
             <motion.div
               key="to"
               className="absolute"
-              initial={reduced ? { opacity: 0 } : { rotateY: -90, scale: 0.9 }}
+              initial={reduced ? { opacity: 0 } : { rotateY: -90, scale: 0.92 }}
               animate={{ rotateY: 0, scale: 1, opacity: 1 }}
-              transition={reduced ? { duration: 0.2 } : { type: 'spring', stiffness: 200, damping: 14 }}
+              transition={reduced ? { duration: 0.15 } : { type: 'spring', stiffness: 380, damping: 20 }}
             >
-              <RankInsignia rank={b} size={168} glow />
+              <RankInsignia rank={b} size={144} />
             </motion.div>
           )}
-          <div className="absolute -right-8 bottom-2" style={{ isolation: 'isolate' }}>
-            <Stamp text="Promoted" show={phase === 2} color="#C8323C" />
+          <div className="absolute -bottom-4 -right-16" style={{ isolation: 'isolate' }}>
+            <Stamp text="Promoted" show={phase === 2} color="#D7261E" />
           </div>
         </div>
 
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: phase === 2 ? 1 : 0, y: phase === 2 ? 0 : 10 }} transition={{ delay: reduced ? 0 : 0.25 }}>
-          <p className="mt-6 text-sm" style={{ color: FP.muted, fontFamily: FP.mono }}>
+        <motion.div
+          className="w-full"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: phase === 2 ? 1 : 0 }}
+          transition={{ delay: reduced ? 0 : 0.2, duration: 0.15 }}
+        >
+          <p className="mt-4 text-sm" style={{ color: FP.muted }}>
             {a.name} <span aria-hidden>→</span>
           </p>
-          <h2 className="mt-1 text-4xl font-black sm:text-5xl" style={{ fontFamily: FP.display, color: b.color, textShadow: `0 0 24px ${b.color}55` }}>
+          <h2 className="mt-0.5 text-4xl font-black leading-none sm:text-[2.6rem]" style={{ fontFamily: FP.display, letterSpacing: '-0.03em' }}>
             {b.name}
           </h2>
-          <p className="mt-4 text-sm italic" style={{ color: FP.ink, opacity: 0.85 }}>
-            “{line}” <span className="not-italic" style={{ color: FP.muted }}>— Otto</span>
+          <p className="mt-4 text-left text-sm" style={{ color: FP.ink, borderLeft: `3px solid ${FP.hl}`, paddingLeft: 10 }}>
+            “{line}” <span style={{ color: FP.muted }}>Otto</span>
           </p>
-          <button
-            ref={btnRef}
-            type="button"
-            onClick={() => doneRef.current()}
-            className="mt-7 px-6 py-2.5 text-sm font-semibold uppercase tracking-[0.18em] outline-none transition hover:brightness-110 focus-visible:ring-2"
-            style={{ borderRadius: 8, color: '#1A120A', background: 'linear-gradient(180deg, #F3D99A, #D4A857 55%, #A9833D)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.5), 0 10px 24px -12px rgba(212,168,87,0.9)', textShadow: '0 1px 0 rgba(255,255,255,0.35)' }}
-          >
+          <button ref={btnRef} type="button" onClick={() => doneRef.current()} className="fp-brass mt-6 min-h-11 w-full px-6 text-sm">
             Back to the desk
           </button>
         </motion.div>
-      </div>
+      </motion.div>
     </motion.div>
   );
-  return typeof document === 'undefined' ? node : createPortal(node, document.body);
+  return typeof document === 'undefined' ? node : createPortal(<SkinProvider>{node}</SkinProvider>, document.body);
 }

@@ -14,6 +14,9 @@ const BureauHub = lazy(() => import('@/grid/screens/hub/BureauHub'));
 const DistrictScreen = lazy(() => import('@/grid/screens/hub/DistrictScreen'));
 const CaseRack = lazy(() => import('@/grid/screens/hub/CaseRack'));
 const ModesScreen = lazy(() => import('@/grid/screens/hub/ModesScreen'));
+// How to play + the interactive practice case.
+const GuideScreen = lazy(() => import('@/grid/guide/GuideScreen'));
+const PracticeCase = lazy(() => import('@/grid/guide/PracticeCase'));
 
 // Desk and modes are owned by other modules. They are resolved through import.meta.glob so the
 // app keeps running while a module is still missing (a placeholder screen is shown instead).
@@ -62,7 +65,7 @@ function FileSlide({ children }: { children: ReactNode }) {
 }
 
 const Loading = () => (
-  <SkinProvider className="min-h-dvh" style={{ background: 'var(--fp-bg)' }}>
+  <SkinProvider className="grid min-h-dvh place-items-center" style={{ background: 'var(--fp-bg)' }}>
     <LanternLoader />
   </SkinProvider>
 );
@@ -95,6 +98,8 @@ function Shell() {
             <Route path="/plans/d/:district" element={page(<DistrictScreen />)} />
             <Route path="/plans/d/:district/:tier" element={page(<CaseRack />)} />
             <Route path="/plans/d/:district/:tier/:n" element={page(<CaseDesk />)} />
+            <Route path="/plans/guide" element={page(<GuideScreen />)} />
+            <Route path="/plans/guide/practice" element={page(<PracticeCase />)} />
 
             {/* retired routes: story mode and v1 Crime Files */}
             <Route path="/files/*" element={<Navigate to="/plans" replace />} />

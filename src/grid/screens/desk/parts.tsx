@@ -1,17 +1,18 @@
 /**
- * Desk-local pieces built on the Floorplan design system (`@/grid/ui`): the skinned night desk,
- * button aliases, overlays, polaroids, variant icons and the Board wrapper.
+ * Desk-local pieces built on the Floorplan design system (`@/grid/ui`), in the printed case-file
+ * look (docs/PRINT-DESIGN.md): the paper desk, button aliases, overlays, suspect photo cards,
+ * variant icons and the Board wrapper.
  */
 import { createContext, useContext, useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import clsx from 'clsx';
-import { MapPin, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { Avatar, luminance } from '@/components/avatar';
 import { Board, type BoardProps } from '@/grid/board';
 import { DISTRICTS, getDistrict } from '@/grid/skins/districts';
 import type { District } from '@/grid/skins/types';
 import type { Person, Puzzle, Variant } from '@/grid/types';
-import { BrassButton, DeskBackground, GhostButton, SkinProvider, VariantGlyph } from '@/grid/ui';
+import { BrassButton, DeskBackground, GhostButton, PRINT, SkinProvider, VariantGlyph } from '@/grid/ui';
 
 // ─────────────────────────── skin ───────────────────────────
 
@@ -23,59 +24,47 @@ export function districtFor(puzzle: Pick<Puzzle, 'seasonId' | 'skinId'> | null |
   );
 }
 
-// ─────────────────────────── mood (night / light districts) ───────────────────────────
+// ─────────────────────────── mood (kept for callers; the UI is the same printed look everywhere) ───────────────────────────
 
 export type DeskMood = 'night' | 'light';
 
-/** 'light' for the pastel daytime districts (explicit `mood`, else palette.bg luminance). */
+/** 'light' for the pastel daytime districts (explicit `mood`, else palette.bg luminance). Flavour only. */
 export function moodOf(d: District): DeskMood {
   if (d.mood) return d.mood;
   return luminance(d.palette.bg) > 0.45 ? 'light' : 'night';
 }
 
 const MoodContext = createContext<DeskMood>('night');
-/** Current desk mood (inside a DeskFrame). */
+/** Current desk mood (inside a DeskFrame). The chrome does not change with it any more. */
 export const useDeskMood = (): DeskMood => useContext(MoodContext);
 
 /**
- * Desk-level tokens on top of the --fp-* palette, so every piece reads right on dark and light:
- * --dk-shade (inset wells), --dk-hover, --dk-line (hairlines), --dk-shadow (drop shadows),
- * --dk-backdrop (overlay scrim), --dk-cone (spotlight light), --dk-paper (testimony stationery).
+ * Desk-level tokens on top of the --fp-* palette. v3: one printed palette for every district.
+ * --dk-shade (inset wells), --dk-hover, --dk-line (rules), --dk-shadow (hard shadow colour),
+ * --dk-backdrop (overlay scrim), --dk-paper (testimony card), --dk-accent-text (red text on white).
  */
-export function deskVars(mood: DeskMood): CSSProperties {
-  return (mood === 'light'
-    ? {
-        '--dk-shade': 'color-mix(in srgb, var(--fp-ink) 6%, transparent)',
-        '--dk-hover': 'color-mix(in srgb, var(--fp-accent) 12%, transparent)',
-        '--dk-line': 'color-mix(in srgb, var(--fp-ink) 14%, transparent)',
-        '--dk-shadow': 'color-mix(in srgb, var(--fp-accent) 28%, rgb(90 60 90 / 0.25))',
-        '--dk-backdrop': 'color-mix(in srgb, var(--fp-bg) 80%, transparent)',
-        '--dk-cone': 'color-mix(in srgb, var(--fp-accent2) 55%, white)',
-        '--dk-paper': 'linear-gradient(180deg, color-mix(in srgb, var(--fp-accent) 9%, white), color-mix(in srgb, var(--fp-accent2) 12%, white))',
-        '--dk-paper-ink': 'var(--fp-ink)',
-        '--dk-accent-text': 'color-mix(in srgb, var(--fp-accent) 70%, var(--fp-ink))',
-      }
-    : {
-        '--dk-shade': 'rgb(0 0 0 / 0.25)',
-        '--dk-hover': 'rgb(255 255 255 / 0.06)',
-        '--dk-line': 'rgb(255 255 255 / 0.1)',
-        '--dk-shadow': 'rgb(0 0 0 / 0.8)',
-        '--dk-backdrop': 'rgb(4 3 2 / 0.78)',
-        '--dk-cone': 'rgb(255 236 190 / 0.38)',
-        '--dk-paper': 'linear-gradient(180deg,#f3ead8,#e9dcc2)',
-        '--dk-paper-ink': '#2a2117',
-        '--dk-accent-text': 'var(--fp-accent2)',
-      }) as CSSProperties;
+export function deskVars(_mood?: DeskMood): CSSProperties {
+  return {
+    '--dk-shade': '#EBEBE5',
+    '--dk-hover': 'color-mix(in srgb, var(--fp-hl) 45%, white)',
+    '--dk-line': 'var(--fp-hair, #D9D9D2)',
+    '--dk-shadow': 'var(--fp-ink)',
+    '--dk-backdrop': 'rgb(241 241 236 / 0.94)',
+    '--dk-cone': 'transparent',
+    '--dk-paper': 'var(--fp-panel)',
+    '--dk-paper-ink': 'var(--fp-ink)',
+    '--dk-accent-text': 'var(--fp-accent2)',
+  } as CSSProperties;
 }
 
-/** The desk page: SkinProvider (--fp-* vars) + mood tokens + DeskBackground (lamp, grain, dust). */
+/** The desk page: SkinProvider (--fp-* vars) + desk tokens + the graph-paper background. */
 export function DeskFrame({
   district,
-  lampFollow = true,
   children,
   className,
 }: {
   district: District;
+  /** v2 option (lamp follows the cursor); the paper desk has no lamp. */
   lampFollow?: boolean;
   children: ReactNode;
   className?: string;
@@ -88,7 +77,7 @@ export function DeskFrame({
         className={clsx('relative isolate min-h-dvh w-full overflow-x-clip font-sans', className)}
         style={{ background: 'var(--fp-bg)', ...deskVars(mood) }}
       >
-        <DeskBackground dust lamp={lampFollow ? 1 : 0.7} />
+        <DeskBackground />
         <div className="relative" data-mood={mood}>
           {children}
         </div>
@@ -117,40 +106,67 @@ export function PanelBox({
   );
 }
 
-/** Aliases of the design-system buttons (brass plate primary, ghost secondary). */
+/** Aliases of the design-system buttons (red primary, white outlined secondary). */
 export const BrassBtn = BrassButton;
 export const GhostBtn = GhostButton;
 
-const BRASS_BG = 'linear-gradient(180deg, #f6dc9a 0%, #d6a752 42%, #a8792f 58%, #8b6224 100%)';
-const CANDY_BG =
-  'linear-gradient(180deg, rgb(255 255 255 / 0.55), rgb(255 255 255 / 0) 55%), linear-gradient(100deg, color-mix(in srgb, var(--fp-accent) 55%, white), color-mix(in srgb, var(--fp-accent2) 60%, white))';
+/** Small muted section label (sentence case, never tracked caps). */
+export function DeskLabel({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={clsx('text-[13px] font-semibold leading-tight text-[var(--fp-muted)]', className)}>{children}</div>;
+}
 
+/** Timer: mono digits in an ink-bordered box; red when time is running out. */
 export function MonoClock({ ms, warn, className, label }: { ms: string; warn?: boolean; className?: string; label?: string }) {
-  const light = useDeskMood() === 'light';
   return (
     <div
       role="timer"
       aria-label={label ?? 'Elapsed time'}
       className={clsx(
-        'rounded-[8px] px-3 py-1.5 text-center font-mono text-base font-semibold tabular-nums tracking-wider',
-        warn ? (light ? 'text-white' : 'text-[#ffb4a8]') : light ? 'text-[var(--fp-ink)]' : 'text-[#2b1b08]',
+        'rounded-[6px] border-2 border-[var(--fp-ink)] px-3 py-1.5 text-center font-mono text-base font-semibold tabular-nums',
+        warn ? 'bg-[var(--fp-accent)] text-white' : 'bg-[var(--fp-panel)] text-[var(--fp-ink)]',
         className,
       )}
-      style={{
-        background: warn
-          ? light
-            ? 'linear-gradient(180deg, var(--fp-danger), color-mix(in srgb, var(--fp-danger) 70%, black))'
-            : 'linear-gradient(180deg,#7a2018,#4a120d)'
-          : light
-            ? CANDY_BG
-            : BRASS_BG,
-        boxShadow: light
-          ? 'inset 0 1px 0 rgb(255 255 255 / 0.8), 0 4px 12px -6px var(--dk-shadow)'
-          : 'inset 0 1px 0 rgb(255 250 230 / 0.5), inset 0 -2px 0 rgb(0 0 0 / 0.25)',
-      }}
     >
       {ms}
     </div>
+  );
+}
+
+/** White square toolbar button with an ink outline; `pressed` = yellow highlighter. */
+export function SquareBtn({
+  label,
+  title,
+  onClick,
+  disabled,
+  pressed,
+  children,
+  className,
+}: {
+  label: string;
+  title?: string;
+  onClick: () => void;
+  disabled?: boolean;
+  pressed?: boolean;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      aria-pressed={pressed}
+      title={title ?? label}
+      className={clsx(
+        'grid size-9 shrink-0 place-items-center rounded-[6px] border-2 border-[var(--fp-ink)] text-[var(--fp-ink)] transition-[background,transform] duration-100 active:translate-y-px',
+        'disabled:cursor-not-allowed disabled:border-[#9A9A94] disabled:bg-[var(--fp-grey,#C9C9C3)] disabled:text-[#6B6B66] disabled:active:translate-y-0',
+        pressed ? 'bg-[var(--fp-hl)]' : 'bg-[var(--fp-panel)] enabled:hover:bg-[var(--dk-hover)]',
+        className,
+      )}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -163,7 +179,7 @@ export function Overlay({
   label,
   children,
   className,
-  backdrop = 'var(--dk-backdrop, rgb(4 3 2 / 0.78))',
+  backdrop = 'var(--dk-backdrop, rgb(241 241 236 / 0.94))',
 }: {
   open: boolean;
   onClose?: () => void;
@@ -214,7 +230,7 @@ export function Overlay({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
+          transition={{ duration: 0.15 }}
           onClick={(e) => {
             if (e.target === e.currentTarget) onClose?.();
           }}
@@ -230,13 +246,26 @@ let overlayStack: object[] = [];
 /** True while any desk overlay (line-up, burn, confirm, explainer…) is open — they own the keyboard. */
 export const anyOverlayOpen = () => overlayStack.length > 0;
 
+/** The white sheet a dialog sits on: ink border, hard shadow. */
+export const SHEET_CLASS = 'fp-panel fp-panel--glow';
+
 // ─────────────────────────── variant icon ───────────────────────────
 
 export function VariantIcon({ variant, className, size = 16 }: { variant: Variant; className?: string; size?: number }) {
   return <VariantGlyph variant={variant} size={size} className={className} />;
 }
 
-// ─────────────────────────── polaroid ───────────────────────────
+// ─────────────────────────── suspect photo card ───────────────────────────
+
+/** Map pin in the print palette: red head, ink outline (marks a pinned suspect). */
+function PinMark({ className }: { className?: string }) {
+  return (
+    <svg aria-hidden viewBox="0 0 16 20" className={className}>
+      <path d="M8 19 L8 11" stroke={PRINT.ink} strokeWidth="2" strokeLinecap="round" />
+      <circle cx="8" cy="7" r="5.5" fill={PRINT.red} stroke={PRINT.ink} strokeWidth="2" />
+    </svg>
+  );
+}
 
 export function Polaroid({
   person,
@@ -248,7 +277,6 @@ export function Polaroid({
   size = 'md',
   onSelect,
   onToggleCleared,
-  tilt = 0,
 }: {
   person: Person;
   selected?: boolean;
@@ -259,17 +287,16 @@ export function Polaroid({
   size?: 'sm' | 'md';
   onSelect?: () => void;
   onToggleCleared?: () => void;
+  /** v2 option (scattered tilt); the printed cards sit square. */
   tilt?: number;
 }) {
   const av = size === 'sm' ? 46 : 58;
-  const light = useDeskMood() === 'light';
   return (
     <motion.div
       layout="position"
       className="group relative shrink-0"
       animate={flagged ? { x: [0, -4, 4, -3, 3, 0] } : { x: 0 }}
       transition={{ duration: 0.4 }}
-      style={{ rotate: selected ? 0 : tilt }}
     >
       <button
         type="button"
@@ -277,68 +304,41 @@ export function Polaroid({
         aria-pressed={selected}
         aria-label={`${victim ? 'Victim' : 'Suspect'} ${person.name}${placed ? ', pinned' : ''}${cleared ? ', cleared' : ''}`}
         className={clsx(
-          'relative flex flex-col items-center rounded-[3px] px-1.5 pb-1.5 pt-1.5 transition-[transform,box-shadow] duration-200',
-          light ? 'bg-white text-[var(--fp-ink)]' : 'bg-[#f4efe4] text-[#2a241c]',
-          'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--fp-accent2)]',
-          selected ? '-translate-y-1' : 'hover:-translate-y-0.5',
+          'relative flex flex-col items-center rounded-[5px] px-[5px] pt-[5px] text-[var(--fp-ink)] transition-[transform,background,box-shadow] duration-150',
+          victim ? 'pb-4' : 'pb-1.5',
+          selected ? '-translate-y-0.5 bg-[var(--fp-hl)]' : 'bg-[var(--fp-panel)] hover:-translate-y-0.5',
         )}
         style={{
           width: av + 14,
           boxShadow: flagged
-            ? '0 0 0 2px var(--fp-danger)'
+            ? `inset 0 0 0 3px ${PRINT.red}`
             : selected
-              ? '0 0 0 2px var(--fp-accent), 0 14px 24px -10px var(--dk-shadow)'
-              : '0 6px 14px -6px var(--dk-shadow)',
+              ? `inset 0 0 0 3px ${PRINT.ink}, 3px 3px 0 ${PRINT.ink}`
+              : `inset 0 0 0 2px ${PRINT.ink}`,
         }}
       >
         <span
-          className="block overflow-hidden rounded-[2px]"
+          className="block overflow-hidden rounded-[3px]"
           style={{
             width: av,
             height: av,
-            background: light
-              ? victim
-                ? 'linear-gradient(160deg, color-mix(in srgb, var(--fp-danger) 25%, white), color-mix(in srgb, var(--fp-danger) 10%, white))'
-                : 'linear-gradient(160deg, color-mix(in srgb, var(--fp-accent) 22%, white), color-mix(in srgb, var(--fp-accent2) 22%, white))'
-              : victim
-                ? 'linear-gradient(160deg,#3a1d1d,#1b0e0e)'
-                : 'linear-gradient(160deg,#36404d,#1a1f27)',
-            filter: victim ? (light ? 'grayscale(0.45)' : 'grayscale(0.7) sepia(0.3)') : undefined,
+            background: victim ? '#F4DEDC' : '#E6E6DF',
+            boxShadow: `inset 0 0 0 1.5px ${PRINT.ink}`,
+            filter: victim ? 'grayscale(0.6)' : undefined,
           }}
         >
           <Avatar spec={person.avatar} size={av} mood={victim ? 'sad' : 'neutral'} />
         </span>
-        <span className="mt-1 block w-full truncate text-center font-display text-[11px] italic leading-tight">
-          {person.name}
-        </span>
-        {placed &&
-          (light ? (
-            <span
-              aria-hidden
-              className="absolute -top-2 left-1/2 h-3.5 w-9 -translate-x-1/2 -rotate-6 rounded-[2px] opacity-90"
-              style={{
-                background:
-                  'repeating-linear-gradient(45deg, color-mix(in srgb, var(--fp-accent) 55%, white) 0 4px, color-mix(in srgb, var(--fp-accent2) 45%, white) 4px 8px)',
-                boxShadow: '0 1px 3px rgb(0 0 0 / 0.12)',
-              }}
-            />
-          ) : (
-            <span
-              aria-hidden
-              className="absolute -top-2 left-1/2 grid size-4 -translate-x-1/2 place-items-center rounded-full"
-              style={{ background: 'radial-gradient(circle at 35% 30%, #fff1c2, #d4a857 45%, #7a5520)' }}
-            >
-              <MapPin className="size-2.5 text-[#3a2508]" strokeWidth={3} />
-            </span>
-          ))}
+        <span className="mt-1 block w-full truncate text-center text-[12px] font-semibold leading-tight">{person.name}</span>
+        {placed && <PinMark className="absolute -top-2.5 left-1/2 h-5 w-4 -translate-x-1/2" />}
         {cleared && (
-          <svg aria-hidden viewBox="0 0 40 40" className="pointer-events-none absolute inset-2 opacity-85">
-            <path d="M6 6 L34 34 M34 6 L6 34" stroke="#c0281f" strokeWidth="4" strokeLinecap="round" />
+          <svg aria-hidden viewBox="0 0 40 40" className="pointer-events-none absolute inset-2 opacity-90">
+            <path d="M6 6 L34 34 M34 6 L6 34" stroke={PRINT.red} strokeWidth="4.5" strokeLinecap="round" />
           </svg>
         )}
         {victim && (
-          <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 rounded-sm bg-[var(--fp-danger)] px-1 text-[8px] font-bold uppercase tracking-wider text-white">
-            victim
+          <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 rounded-[3px] bg-[var(--fp-danger)] px-1.5 text-[12px] font-bold leading-[18px] text-white shadow-[inset_0_0_0_1.5px_var(--fp-ink)]">
+            Victim
           </span>
         )}
       </button>
@@ -349,18 +349,16 @@ export function Polaroid({
           aria-label={cleared ? `Un-clear ${person.name}` : `Mark ${person.name} as cleared`}
           title={cleared ? 'Un-clear' : 'Mark as cleared'}
           className={clsx(
-            'absolute -right-1.5 -top-1.5 grid size-5 place-items-center rounded-full bg-[var(--fp-panel)] text-[var(--fp-danger)] ring-1 ring-[var(--dk-line)] transition-opacity',
-            'opacity-0 focus-visible:opacity-100 group-hover:opacity-100',
-            cleared && 'opacity-100',
+            'absolute -right-2 -top-2 grid size-6 place-items-center rounded-full border-2 border-[var(--fp-ink)] transition-opacity',
+            cleared ? 'bg-[var(--fp-accent)] text-white opacity-100' : 'bg-[var(--fp-panel)] text-[var(--fp-danger)] opacity-0 focus-visible:opacity-100 group-hover:opacity-100',
           )}
         >
-          <X className="size-3" strokeWidth={3} />
+          <X className="size-3.5" strokeWidth={3} />
         </button>
       )}
     </motion.div>
   );
 }
-
 
 // ─────────────────────────── board ───────────────────────────
 
@@ -368,4 +366,15 @@ export type DeskBoardProps = BoardProps;
 
 export function DeskBoard(props: DeskBoardProps) {
   return <Board {...props} />;
+}
+
+/** The board on the paper like a pinned print: white mat, ink border, hard shadow, two bits of tape. */
+export function PlanFrame({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <div className={clsx('relative rounded-[4px] bg-[var(--fp-panel)] p-1.5 sm:p-2', className)} style={{ boxShadow: `inset 0 0 0 2px ${PRINT.ink}, 5px 5px 0 ${PRINT.ink}` }}>
+      <span aria-hidden className="absolute -top-2.5 left-6 z-10 h-5 w-14 -rotate-3 rounded-[2px] border-[1.5px] border-[var(--fp-ink)] bg-[#E6E6DF]" />
+      <span aria-hidden className="absolute -top-2.5 right-6 z-10 h-5 w-14 rotate-2 rounded-[2px] border-[1.5px] border-[var(--fp-ink)] bg-[#E6E6DF]" />
+      {children}
+    </div>
+  );
 }

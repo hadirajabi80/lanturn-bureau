@@ -19,7 +19,7 @@ function manualChunks(id: string): string | undefined {
   return undefined;
 }
 
-const THEME = '#120E0B';
+const THEME = '#F1F1EC';
 
 export default defineConfig({
   plugins: [

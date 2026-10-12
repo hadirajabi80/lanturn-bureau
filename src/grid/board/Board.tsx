@@ -20,7 +20,7 @@ import { cellKey, type Cell, type CellMarks, type Furniture, type FurnitureKind,
 import { Burn } from './Burn';
 import { FurnitureCaptions, FurnitureTag, furnitureName, furnitureRule, pieceBox, tagColors, type PieceBox } from './FurnitureTag';
 import { LineAssist } from './LineAssist';
-import { CrossMark, PencilNotes } from './Marks';
+import { CrossMark, EmptyMark, PencilNotes } from './Marks';
 import { PersonToken } from './PersonToken';
 import { FurnitureSprite } from './sprites';
 import { buildWallGeo, resolveSkin, type SkinCtx, type SkinRenderer, type SkinTokens } from './skins';
@@ -60,6 +60,12 @@ export interface BoardProps {
   onCellTap: (cell: Cell) => void;
   /** Long-press (touch), Alt+click or Shift+Enter: e.g. cross a cell out for everyone. */
   onCellLongPress?: (cell: Cell) => void;
+  /**
+   * With the 'empty' tool: a press starts a stroke ('start') and every further square the pointer
+   * drags over is reported once ('move'), so several squares can be marked "nobody here" in one go.
+   * When given, the tap that ends a stroke is not reported again through onCellTap.
+   */
+  onCellPaint?: (cell: Cell, phase: 'start' | 'move') => void;
   /** Shown in title blocks ("ASH-H-12"). */
   caseCode?: string;
   /** Tapping a furniture square pops a name tag above the piece (default true). */
@@ -446,12 +452,47 @@ export function Board(props: BoardProps): JSX.Element {
     }, LONG_PRESS_MS);
     press.current = state;
   };
+  // ── paint stroke (Empty tool: drag over squares) ──
+  const painting = tool === 'empty' && !!props.onCellPaint;
+  const stroke = useRef<{ last: string; moved: boolean } | null>(null);
+  const strokeEnded = useRef(0);
+  const onPaintDown = (e: PointerEvent<SVGRectElement>, cell: Cell) => {
+    const paint = props.onCellPaint;
+    if (!paint || e.button !== 0) return;
+    stroke.current = { last: cellKey(cell), moved: false };
+    paint(cell, 'start');
+    const onMove = (ev: globalThis.PointerEvent) => {
+      const st = stroke.current;
+      if (!st || ev.pointerId !== e.pointerId) return;
+      const el = document.elementFromPoint(ev.clientX, ev.clientY);
+      const key = el instanceof SVGElement ? el.getAttribute('data-cell') : null;
+      if (!key || key === st.last || !el?.classList.contains(hitClass)) return;
+      const next = parseKey(key);
+      if (!next) return;
+      st.last = key;
+      st.moved = true;
+      paint(next, 'move');
+    };
+    const onEnd = (ev: globalThis.PointerEvent) => {
+      if (ev.pointerId !== e.pointerId) return;
+      stroke.current = null;
+      strokeEnded.current = Date.now();
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onEnd);
+      window.removeEventListener('pointercancel', onEnd);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onEnd);
+    window.addEventListener('pointercancel', onEnd);
+  };
+
   const onHitMove = (e: PointerEvent<SVGRectElement>) => {
     const p = press.current;
     if (p && !p.fired && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 10) cancelPress();
   };
   const onHitClick = (e: MouseEvent<SVGRectElement>, i: number, cell: Cell) => {
     setRove(i);
+    if (painting && Date.now() - strokeEnded.current < 400) return;
     const p = press.current;
     press.current = null;
     if (p?.fired) return;
@@ -492,14 +533,16 @@ export function Board(props: BoardProps): JSX.Element {
     if (f) parts.push(`${furnitureName(f.kind).toLowerCase()} (${furnitureRule(f.kind)})`);
     if (who) parts.push(`${who.name}${who.isVictim ? ' (victim)' : ''} pinned here`);
     if (noted.length) parts.push(`pencilled: ${noted.join(', ')}`);
-    if (crossed.length) parts.push(`crossed out for ${crossed.join(', ')}`);
+    const nobody = (crosses[k] ?? []).includes('*') || (allIds.length > 0 && allIds.every((id) => (crosses[k] ?? []).includes(id)));
+    if (nobody) parts.push('nobody can be here');
+    else if (crossed.length) parts.push(`crossed out for ${crossed.join(', ')}`);
     return parts.join(', ');
   };
 
   const crossW = Math.max(ctx.px(2.6), 7);
   const hitClass = `${uid}-hit`;
   const hoverCss = `
-.${hitClass}{fill:transparent;stroke:none;cursor:${tool === 'erase' ? 'cell' : tool === 'cross' ? 'crosshair' : 'pointer'};outline:none}
+.${hitClass}{fill:transparent;stroke:none;cursor:${tool === 'erase' ? 'cell' : tool === 'cross' || tool === 'empty' ? 'crosshair' : 'pointer'};outline:none${painting ? ';touch-action:none' : ''}}
 @media (hover:hover){.${hitClass}:hover{fill:${tokens.hover};fill-opacity:.13;stroke:${tokens.hover};stroke-opacity:.85;stroke-width:${ctx.px(2).toFixed(2)}px}}`;
 
   const allIds = puzzle.people.map((p) => p.id);
@@ -611,6 +654,7 @@ export function Board(props: BoardProps): JSX.Element {
                 const cell = parseKey(k);
                 if (!cell) return null;
                 const everyone = ids.includes('*') || allIds.every((id) => ids.includes(id));
+                if (everyone) return <EmptyMark key={k} k={k} r={cell.r} c={cell.c} ink={tokens.note} paper={tokens.noteBg} width={crossW} reduceMotion={reduceMotion} />;
                 if (crossFor === 'all') {
                   return <CrossMark key={k} k={k} r={cell.r} c={cell.c} color={tokens.cross} width={crossW} small={!everyone} reduceMotion={reduceMotion} />;
                 }
@@ -712,7 +756,8 @@ export function Board(props: BoardProps): JSX.Element {
                   role="button"
                   tabIndex={i === rove ? 0 : -1}
                   aria-label={ariaFor(c)}
-                  onPointerDown={(e) => onHitDown(e, c)}
+                  data-cell={cellKey(c)}
+                  onPointerDown={(e) => (painting ? onPaintDown(e, c) : onHitDown(e, c))}
                   onPointerEnter={hoverOn ? (e) => onHitEnter(e, c) : undefined}
                   onPointerMove={onCellLongPress ? onHitMove : undefined}
                   onPointerUp={onCellLongPress ? cancelPress : undefined}

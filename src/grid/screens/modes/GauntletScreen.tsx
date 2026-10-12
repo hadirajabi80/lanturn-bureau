@@ -6,16 +6,16 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import clsx from 'clsx';
-import { Building, ChevronRight, Flame, MessageCircleQuestion, Swords } from 'lucide-react';
-import { DISTRICTS, TIER_INFO } from '@/grid/skins/districts';
+import { Check, ChevronRight, Swords } from 'lucide-react';
+import { DISTRICTS } from '@/grid/skins/districts';
 import { useFloorplan, type RecordOutcome } from '@/grid/store';
 import type { Puzzle, Tier, Variant } from '@/grid/types';
-import { BrassButton, GhostButton, MonoStat, PageShell, VariantGlyph } from '@/grid/ui';
+import { BrassButton, GhostButton, MonoStat, PageShell, SkinProvider, VariantGlyph } from '@/grid/ui';
 import { generateCustom, hashSeed } from '../desk/bridge';
 import { CasePlayer } from '../desk/CasePlayer';
 import { DeskLoading, useGeneratedPuzzle } from '../desk/loading';
 import { VARIANT_META } from '../desk/util';
-import { RunCard } from './shared';
+import { FactTable, IntroSheet, ModeLayout, RunCard } from './shared';
 
 export interface GauntletStage {
   tier: Tier;
@@ -102,33 +102,43 @@ export function GauntletScreen() {
   }
 
   return (
-    <PageShell title="The Gauntlet" kicker="Modes · seven floors" back="/plans/modes" backLabel="Back to modes">
-      <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
+    <SkinProvider>
+      <PageShell title="The Gauntlet" kicker="Modes · seven floors" back="/plans/modes" backLabel="Back to modes">
         {phase === 'over' && end ? (
-          <RunCard
-            kicker={end.stage >= GAUNTLET.length ? 'The roof' : 'The file burned'}
-            title={end.stage >= GAUNTLET.length ? 'You survived the Gauntlet' : end.newBest ? 'Your highest climb yet' : 'The run is over'}
-            big={`${end.stage}/${GAUNTLET.length}`}
-            bigLabel="floors cleared"
-            lines={<>Best: {Math.max(best, end.stage)} / {GAUNTLET.length}</>}
-            outcome={end.outcome}
-          >
-            <BrassButton onClick={start} icon={<Swords className="size-4" />}>
-              Climb again
-            </BrassButton>
-            <GhostButton onClick={() => navigate('/plans/modes')}>Back to modes</GhostButton>
-          </RunCard>
+          <div className="py-2 sm:py-6">
+            <RunCard
+              kicker={end.stage >= GAUNTLET.length ? 'The roof' : 'The file burned'}
+              title={end.stage >= GAUNTLET.length ? 'You survived the Gauntlet' : end.newBest ? 'Your highest climb yet' : 'The run is over'}
+              big={`${end.stage}/${GAUNTLET.length}`}
+              bigLabel="floors cleared"
+              lines={<>Best: {Math.max(best, end.stage)} / {GAUNTLET.length}</>}
+              outcome={end.outcome}
+            >
+              <BrassButton onClick={start} icon={<Swords className="size-4" />}>
+                Climb again
+              </BrassButton>
+              <GhostButton onClick={() => navigate('/plans/modes')}>Back to modes</GhostButton>
+            </RunCard>
+          </div>
         ) : phase === 'cleared' ? (
-          <motion.section initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="fp-panel fp-panel--glow mx-auto max-w-md p-6 text-center">
-            <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[var(--dk-accent-text,var(--fp-accent2))]">Floor {stage + 1} cleared</div>
-            <h2 className="mt-1 font-display text-3xl font-black">Up the stairs</h2>
-            <div className="mt-5">
+          <motion.section
+            initial={{ y: 12, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ type: 'spring', stiffness: 520, damping: 36 }}
+            className="fp-panel fp-panel--glow mx-auto my-2 max-w-md p-5 sm:my-6 sm:p-6"
+          >
+            <p className="text-[13px] font-semibold text-(--fp-muted)">Floor {stage + 1} cleared</p>
+            <h2 className="mt-0.5 border-b-2 border-(--fp-ink) pb-3 font-display text-[1.9rem] font-black leading-[1.05] tracking-[-0.02em]">
+              Up the stairs
+            </h2>
+            <div className="mt-3">
               <StageList current={stage + 1} />
             </div>
-            <p className="mt-4 text-sm text-[var(--fp-muted)]">
-              Otto has {Math.max(0, OTTO_PER_RUN - ottoUsed)} {OTTO_PER_RUN - ottoUsed === 1 ? 'answer' : 'answers'} left for this run.
+            <p className="mt-4 text-sm text-(--fp-muted)">
+              Otto has <b className="font-mono text-(--fp-ink)">{Math.max(0, OTTO_PER_RUN - ottoUsed)}</b>{' '}
+              {OTTO_PER_RUN - ottoUsed === 1 ? 'answer' : 'answers'} left for this run.
             </p>
-            <div className="mt-6 flex justify-center gap-2">
+            <div className="mt-5 flex flex-wrap gap-2">
               <BrassButton
                 data-autofocus
                 onClick={() => {
@@ -143,72 +153,86 @@ export function GauntletScreen() {
             </div>
           </motion.section>
         ) : (
-          <section className="fp-panel mx-auto max-w-xl p-6">
-            <div className="flex items-center gap-3">
-              <span className="grid size-12 place-items-center rounded-full bg-[var(--dk-shade,rgb(0_0_0/0.25))]">
-                <Building className="size-6 text-[var(--dk-accent-text,var(--fp-accent2))]" />
-              </span>
-              <div>
-                <div className="font-mono text-[10px] uppercase tracking-[0.28em] text-[var(--fp-muted)]">One life · seven floors</div>
-                <h2 className="font-display text-2xl font-black">Climb to the roof</h2>
-              </div>
-            </div>
-            <ul className="mt-5 space-y-2 text-sm leading-relaxed">
-              <li>Seven cases, each harder than the last — liars, accomplices and a double homicide wait upstairs.</li>
-              <li className="flex items-start gap-1.5">
-                <MessageCircleQuestion className="mt-0.5 size-4 shrink-0 text-[var(--dk-accent-text,var(--fp-accent2))]" /> No Reveal. Otto answers twice in the whole run.
-              </li>
-              <li className="flex items-start gap-1.5">
-                <Flame className="mt-0.5 size-4 shrink-0 text-[#ff8a3d]" /> One burned file ends the climb.
-              </li>
-            </ul>
-            <div className="mt-5">
-              <StageList current={0} />
-            </div>
-            <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
-              <MonoStat label="Best floor" value={`${best} / ${GAUNTLET.length}`} />
-              <BrassButton size="lg" onClick={start} icon={<Swords className="size-4" />}>
-                Enter the Gauntlet
-              </BrassButton>
-            </div>
-          </section>
+          <ModeLayout
+            aside={
+              <FactTable title="The building">
+                <div className="mt-3">
+                  <StageList current={0} />
+                </div>
+                <p className="mt-3 text-[13px] text-(--fp-muted)">Top floor first. Cleared floors get struck off.</p>
+              </FactTable>
+            }
+          >
+            <IntroSheet
+              label="One life · seven floors"
+              title="Climb to the roof"
+              figure="7"
+              figureLabel="Seven floors"
+              rules={[
+                <>Seven cases, each harder than the last. Liars, accomplices and a double homicide wait upstairs.</>,
+                <>No Reveal. Otto answers twice in the whole run.</>,
+                <>One burned file ends the climb.</>,
+              ]}
+              footer={
+                <>
+                  <MonoStat label="Best floor" value={`${best} / ${GAUNTLET.length}`} />
+                  <BrassButton size="lg" onClick={start} icon={<Swords className="size-4" />}>
+                    Enter the Gauntlet
+                  </BrassButton>
+                </>
+              }
+            />
+          </ModeLayout>
         )}
-      </div>
-    </PageShell>
+      </PageShell>
+    </SkinProvider>
   );
 }
 
+/** The building, top floor first: cleared floors struck through, the current one highlighted. */
 function StageList({ current }: { current: number }) {
   return (
-    <ol className="flex flex-col-reverse gap-1 text-left">
-      {GAUNTLET.map((s, i) => (
-        <li
-          key={i}
-          className={clsx(
-            'flex items-center gap-3 rounded-[6px] px-3 py-1.5 text-sm',
-            i < current ? 'text-[var(--fp-muted)] line-through decoration-[var(--fp-accent)]/50' : i === current ? 'bg-[var(--dk-hover,rgb(255_255_255/0.06))] font-semibold' : 'opacity-70',
-          )}
-        >
-          <span className="w-5 font-mono text-xs text-[var(--fp-muted)]">{i + 1}</span>
-          <VariantGlyph variant={s.variant} size={14} className="text-[var(--dk-accent-text,var(--fp-accent2))]" />
-          <span className="flex-1">{s.label}</span>
-          <span className="font-mono text-[11px] text-[var(--fp-muted)]">
-            {s.size}×{s.size} · {TIER_INFO[s.tier].name}
-          </span>
-        </li>
-      ))}
+    <ol className="flex flex-col-reverse overflow-hidden rounded-md text-left shadow-[inset_0_0_0_2px_var(--fp-ink)]" aria-label="Floors">
+      {GAUNTLET.map((s, i) => {
+        const done = i < current;
+        const now = i === current;
+        return (
+          <li
+            key={i}
+            aria-current={now ? 'step' : undefined}
+            className={clsx(
+              'flex items-center gap-3 px-3 py-2 text-sm',
+              i > 0 && 'border-b border-(--fp-hair)',
+              now && 'bg-(--fp-hl) font-semibold shadow-[inset_0_0_0_2px_var(--fp-ink)]',
+              done && 'text-(--fp-muted)',
+            )}
+          >
+            <span className={clsx('w-5 font-mono text-xs font-semibold', now ? 'text-(--fp-ink)' : 'text-(--fp-muted)')}>{i + 1}</span>
+            <VariantGlyph variant={s.variant} size={15} className={done ? 'text-(--fp-muted)' : 'text-(--fp-ink)'} />
+            <span className={clsx('min-w-0 flex-1 truncate', done && 'line-through decoration-(--fp-accent) decoration-2')}>{s.label}</span>
+            <span className="shrink-0 text-right font-mono text-xs text-(--fp-muted)">
+              {s.size}×{s.size}
+            </span>
+            {done && <Check className="size-4 shrink-0 text-(--fp-green)" strokeWidth={3} aria-label="cleared" />}
+          </li>
+        );
+      })}
     </ol>
   );
 }
 
 function FloorMeter({ stage }: { stage: number }) {
   return (
-    <div className="hidden items-center gap-0.5 sm:flex" aria-label={`Floor ${stage + 1} of ${GAUNTLET.length}`} title={VARIANT_META[GAUNTLET[stage]!.variant].name}>
+    <div
+      className="hidden items-center gap-[3px] sm:flex"
+      aria-label={`Floor ${stage + 1} of ${GAUNTLET.length}`}
+      title={VARIANT_META[GAUNTLET[stage]!.variant].name}
+    >
       {GAUNTLET.map((_, i) => (
         <span
           key={i}
-          className="h-4 w-2 rounded-[2px]"
-          style={{ background: i < stage ? 'var(--fp-accent)' : i === stage ? 'var(--fp-accent2)' : 'rgb(255 255 255 / 0.12)' }}
+          className="h-4 w-2 rounded-[2px] shadow-[inset_0_0_0_1.5px_var(--fp-ink)]"
+          style={{ background: i < stage ? 'var(--fp-ink)' : i === stage ? 'var(--fp-accent)' : 'var(--fp-panel)' }}
         />
       ))}
     </div>

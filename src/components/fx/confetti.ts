@@ -1,19 +1,20 @@
 import confetti from 'canvas-confetti';
 import { prefersReducedMotion } from './useReduced';
 
-const GOLD = ['#D4A857', '#FFB347', '#F3E9D2', '#FFF4D6', '#E8C77A'];
-const RANK = [...GOLD, '#C8323C', '#2EC4B6'];
+/** Paper confetti in the printed palette: red, highlighter yellow, ink, white, pencil blue. */
+const PAPER = ['#D7261E', '#FFD84D', '#141414', '#FFFFFF', '#2350D8'];
+const RANK = [...PAPER, '#1E8A4C'];
 const Z = 9000;
 
 /**
- * Celebration bursts via canvas-confetti. 'solve' = one gold/cream burst; 'rank' = a bigger
+ * Celebration bursts via canvas-confetti. 'solve' = one burst of paper squares; 'rank' = a bigger
  * centre burst plus ~1.2 s of side cannons. No-op under reduced motion or outside the browser.
  */
 export function fireConfetti(kind: 'solve' | 'rank'): void {
   if (typeof window === 'undefined' || prefersReducedMotion()) return;
 
   if (kind === 'solve') {
-    void confetti({ particleCount: 90, spread: 70, startVelocity: 42, origin: { y: 0.62 }, colors: GOLD, scalar: 0.95, zIndex: Z });
+    void confetti({ particleCount: 90, spread: 70, startVelocity: 42, origin: { y: 0.62 }, colors: PAPER, shapes: ['square'], scalar: 0.95, zIndex: Z });
     return;
   }
 

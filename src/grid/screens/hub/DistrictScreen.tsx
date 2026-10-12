@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ChevronRight, ChevronsUp, Heart } from 'lucide-react';
+import { ChevronRight, Heart } from 'lucide-react';
 import { getDistrict, TIER_INFO } from '@/grid/skins/districts';
 import { TIERS, VARIANTS_BY_TIER, type Tier } from '@/grid/types';
-import { FacadeArt, MonoStat, PageShell, Panel, Plate, ProgressFilament, SkinProvider, VARIANT_INFO, VariantGlyph, isLightDistrict, useFpReduced } from '@/grid/ui';
+import { FacadeArt, PageShell, ProgressFilament, SkinProvider, VARIANT_INFO, VariantGlyph, isLightDistrict, useFpReduced } from '@/grid/ui';
 import { districtTally, tierTally, useProgressMap, useDistrictAmbience } from '@/grid/ui/bridge';
-import { roman } from './shared';
+import { quarterOf, roman, SectionTitle, Swatch } from './shared';
 
 const FLOOR_MARK: Record<Tier, string> = { easy: 'G', medium: '1', hard: '2', extreme: '3', mastermind: 'R' };
 const TOP_DOWN: Tier[] = [...TIERS].reverse();
@@ -42,67 +42,78 @@ export default function DistrictScreen() {
   return (
     <SkinProvider district={d}>
       <PageShell title={d.name} kicker={d.kicker} back="/plans" backLabel="Back to the Bureau">
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:gap-8">
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:gap-10">
           {/* facade */}
           <section className="min-w-0" aria-label={`${d.name} facade`}>
-            <Panel
-              tone="inset"
-              className="relative flex justify-center overflow-hidden"
-              style={{
-                background: light
-                  ? 'linear-gradient(180deg, color-mix(in srgb, var(--fp-glow) 85%, white), color-mix(in srgb, var(--fp-accent2) 45%, white) 70%, #fff1d6)'
-                  : 'linear-gradient(180deg, color-mix(in srgb, var(--fp-bg) 70%, black), color-mix(in srgb, var(--fp-panel) 70%, var(--fp-glow) 8%))',
-              }}
-            >
-              <FacadeArt
-                district={d}
-                litFraction={t.total ? t.solved / t.total : 0}
-                highlightFloor={TIERS.indexOf(car)}
-                height="clamp(200px, 36vh, 560px)"
-                className="max-w-full"
-                title={`${d.name} at night — ${t.solved} windows lit`}
-              />
-              <div className="absolute left-3 top-3 flex flex-col gap-1">
-                <Plate>District {roman(d.number)}</Plate>
-              </div>
-            </Panel>
-            <p className="mt-4 text-pretty text-[15px] leading-relaxed text-(--fp-muted)">{d.blurb}</p>
-            <div className="mt-4 flex flex-wrap gap-x-8 gap-y-3">
-              <MonoStat label="Closed" value={`${t.solved}/${t.total}`} />
-              <MonoStat label="Stars" value={t.stars} />
-              <MonoStat label="Burned" value={t.burns} />
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-semibold text-(--fp-muted)">
+              <Swatch />
+              <span className="text-(--fp-ink)">District {roman(d.number)}</span>
+              <span aria-hidden>·</span>
+              <span>{quarterOf(d.kicker)}</span>
             </div>
+            <h2 className="fp-display mt-2 text-(--fp-ink)">{d.name}</h2>
+            <figure className="m-0 mt-4">
+              <div className="fp-panel overflow-hidden p-[2px]">
+                <div className="flex justify-center overflow-hidden rounded-[6px]" style={{ background: 'var(--fp-district-bg)' }}>
+                  <FacadeArt
+                    district={d}
+                    litFraction={t.total ? t.solved / t.total : 0}
+                    highlightFloor={TIERS.indexOf(car)}
+                    height="clamp(180px, 30vh, 520px)"
+                    className="block max-w-full"
+                    title={`${d.name}: ${t.solved} windows lit`}
+                  />
+                </div>
+              </div>
+              <figcaption className="mt-2 text-[12px] font-medium text-(--fp-muted)">
+                Each lit window is a closed case. The highlighted floor is the one under the elevator.
+              </figcaption>
+            </figure>
+            <p className="mt-4 text-pretty text-[15px] leading-relaxed text-(--fp-ink)">{d.blurb}</p>
+            <dl className="mt-4 grid grid-cols-3 border-y border-(--fp-hair)">
+              {[
+                ['Closed', `${t.solved}/${t.total}`],
+                ['Stars', t.stars],
+                ['Burned', t.burns],
+              ].map(([label, value], i) => (
+                <div key={label as string} className={['py-2.5', i ? 'border-l border-(--fp-hair) pl-4' : ''].join(' ')}>
+                  <dt className="text-[12px] font-semibold text-(--fp-muted)">{label}</dt>
+                  <dd className="font-mono text-lg font-semibold tabular-nums text-(--fp-ink)">{value}</dd>
+                </div>
+              ))}
+            </dl>
             <ProgressFilament value={t.total ? t.solved / t.total : 0} className="mt-4" label="District progress" />
           </section>
 
           {/* floors */}
           <section aria-labelledby="floors-h" className="min-w-0">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 id="floors-h" className="font-mono text-[11px] uppercase tracking-[0.3em] text-(--fp-muted)">
-                Directory · pick a floor
-              </h2>
-              <span className="fp-plate fp-plate--dark tabular-nums" aria-live="polite">
-                <ChevronsUp className="size-3" aria-hidden /> {TIER_INFO[car].name}
-              </span>
-            </div>
-            <ol className="relative flex flex-col gap-2.5">
+            <SectionTitle
+              index={1}
+              id="floors-h"
+              aside={
+                <span className="inline-flex items-center gap-2 text-[13px] font-semibold text-(--fp-muted)" aria-live="polite">
+                  Elevator at
+                  <span className="fp-plate">{TIER_INFO[car].name}</span>
+                </span>
+              }
+            >
+              Pick a floor
+            </SectionTitle>
+            <ol className="relative flex flex-col gap-3">
               {/* elevator shaft */}
-              <span
-                aria-hidden
-                className="absolute bottom-3 left-[22px] top-3 w-px sm:left-[26px]"
-                style={{ background: 'linear-gradient(180deg, transparent, var(--fp-hair-strong) 8%, var(--fp-hair-strong) 92%, transparent)' }}
-              />
+              <span aria-hidden className="absolute bottom-5 left-[21px] top-5 w-[2px] bg-(--fp-ink) sm:left-[25px]" />
               {TOP_DOWN.map((tier, i) => {
                 const info = TIER_INFO[tier];
                 const tt = tierTally(progress, d.id, tier);
                 const isCar = car === tier;
+                const done = tt.total > 0 && tt.solved === tt.total;
                 const variants = VARIANTS_BY_TIER[tier];
                 return (
                   <motion.li
                     key={tier}
-                    initial={reduced ? false : { opacity: 0, x: 18 }}
+                    initial={reduced ? false : { opacity: 0, x: 10 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: reduced ? 0 : 0.05 * i + 0.1, type: 'spring', stiffness: 260, damping: 24 }}
+                    transition={{ delay: reduced ? 0 : 0.03 * i, type: 'spring', stiffness: 420, damping: 32 }}
                   >
                     <button
                       type="button"
@@ -112,21 +123,22 @@ export default function DistrictScreen() {
                       onFocus={() => setHover(tier)}
                       onBlur={() => setHover(null)}
                       aria-label={`${info.name}, ${info.floor}: ${tt.solved} of ${tt.total} closed`}
-                      className="group grid w-full grid-cols-[44px_minmax(0,1fr)_auto] items-stretch gap-3 text-left sm:grid-cols-[52px_minmax(0,1fr)_auto]"
+                      className="group grid w-full grid-cols-[44px_minmax(0,1fr)] items-stretch gap-3 text-left outline-none sm:grid-cols-[52px_minmax(0,1fr)]"
                     >
                       {/* shaft stop + car */}
                       <span className="relative flex items-center justify-center">
                         {light ? (
                           <Heart
                             aria-hidden
-                            className="size-3"
-                            style={{ color: 'var(--fp-accent)', fill: tt.solved === tt.total ? 'var(--fp-accent)' : 'transparent' }}
+                            className="relative size-3.5 text-(--fp-ink)"
+                            strokeWidth={2}
+                            style={{ fill: done ? 'var(--fp-green)' : 'var(--fp-panel)' }}
                           />
                         ) : (
                           <span
                             aria-hidden
-                            className="size-2 rounded-full"
-                            style={{ background: tt.solved === tt.total ? 'var(--fp-glow)' : 'var(--fp-hair-strong)' }}
+                            className="relative size-3 rounded-full"
+                            style={{ background: done ? 'var(--fp-green)' : 'var(--fp-panel)', boxShadow: 'inset 0 0 0 2px var(--fp-ink)' }}
                           />
                         )}
                         {isCar && (
@@ -134,28 +146,15 @@ export default function DistrictScreen() {
                             layoutId="elevator-car"
                             aria-hidden
                             className={[
-                              'absolute inset-x-1 top-1/2 grid h-11 -translate-y-1/2 place-items-center font-mono text-sm font-bold',
+                              'absolute inset-x-0.5 top-1/2 grid h-11 -translate-y-1/2 place-items-center bg-(--fp-hl) font-mono text-sm font-bold text-(--fp-ink) shadow-[inset_0_0_0_2px_var(--fp-ink),2px_2px_0_var(--fp-ink)]',
                               light ? 'rounded-full' : 'rounded-md',
                             ].join(' ')}
-                            transition={{ type: 'spring', stiffness: 170, damping: 22 }}
-                            style={
-                              light
-                                ? {
-                                    color: '#ffffff',
-                                    background: 'linear-gradient(180deg, color-mix(in srgb, var(--fp-accent) 65%, white), var(--fp-accent))',
-                                    boxShadow: '0 6px 16px -6px var(--fp-accent), inset 0 1px 0 rgb(255 255 255 / 0.6)',
-                                  }
-                                : {
-                                    color: 'color-mix(in srgb, var(--fp-accent) 25%, #120a04)',
-                                    background: 'linear-gradient(180deg, var(--fp-accent2), var(--fp-accent))',
-                                    boxShadow: '0 0 18px -4px var(--fp-glow), inset 0 1px 0 rgb(255 255 255 / 0.4)',
-                                  }
-                            }
+                            transition={{ type: 'spring', stiffness: 420, damping: 32 }}
                           >
                             {light ? (
                               <span className="flex flex-col items-center leading-none">
                                 <Heart className="size-3 fill-current" aria-hidden />
-                                <span className="mt-0.5 text-[11px]">{FLOOR_MARK[tier]}</span>
+                                <span className="mt-0.5 text-[12px]">{FLOOR_MARK[tier]}</span>
                               </span>
                             ) : (
                               FLOOR_MARK[tier]
@@ -163,26 +162,35 @@ export default function DistrictScreen() {
                           </motion.span>
                         )}
                         {!isCar && (
-                          <span aria-hidden className="absolute font-mono text-[11px] text-(--fp-muted) opacity-0 transition-opacity group-hover:opacity-100">
+                          <span
+                            aria-hidden
+                            className="absolute grid size-6 place-items-center rounded-[4px] bg-(--fp-panel) font-mono text-[12px] font-semibold text-(--fp-ink) opacity-0 shadow-[inset_0_0_0_1.5px_var(--fp-ink)] transition-opacity group-hover:opacity-100"
+                          >
                             {FLOOR_MARK[tier]}
                           </span>
                         )}
                       </span>
-                      <Panel
-                        tone={isCar ? 'glow' : 'default'}
-                        className="col-span-2 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 p-3.5 transition-transform group-hover:-translate-x-0.5 sm:p-4"
+                      <span
+                        className={[
+                          'grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-lg p-3.5 transition-[transform,box-shadow,background-color] duration-100 sm:p-4',
+                          'shadow-[inset_0_0_0_2px_var(--fp-ink),3px_3px_0_var(--fp-ink)] group-hover:-translate-x-px group-hover:-translate-y-px group-active:translate-x-[3px] group-active:translate-y-[3px] group-active:shadow-[inset_0_0_0_2px_var(--fp-ink)]',
+                          isCar ? 'bg-[color-mix(in_srgb,var(--fp-hl)_45%,white)]' : 'bg-(--fp-panel)',
+                        ].join(' ')}
                       >
                         <span className="min-w-0">
-                          <span className="flex flex-wrap items-baseline gap-x-2">
-                            <span className="font-display text-lg font-bold text-(--fp-ink) sm:text-xl">{info.name}</span>
-                            <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-(--fp-muted)">{info.floor}</span>
+                          <span className="flex flex-wrap items-baseline gap-x-2.5">
+                            <span className="font-display text-lg font-extrabold tracking-[-0.01em] text-(--fp-ink) sm:text-xl">{info.name}</span>
+                            <span className="text-[13px] font-semibold text-(--fp-muted)">{info.floor}</span>
                           </span>
-                          <span className="mt-0.5 block text-[13px] leading-snug text-(--fp-muted)">{info.blurb}</span>
-                          <span className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] text-(--fp-muted)">
+                          <span className="mt-0.5 block text-[14px] leading-snug text-(--fp-muted)">{info.blurb}</span>
+                          <span className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12px] text-(--fp-muted)">
                             <span className="font-mono">{info.sizes}</span>
-                            <span className="inline-flex items-center gap-1.5" aria-label={`Scenarios: ${variants.map((v) => VARIANT_INFO[v].name).join(', ')}`}>
+                            <span
+                              className="inline-flex items-center gap-1.5 text-(--fp-ink)"
+                              aria-label={`Scenarios: ${variants.map((v) => VARIANT_INFO[v].name).join(', ')}`}
+                            >
                               {variants.map((v) => (
-                                <span key={v} title={VARIANT_INFO[v].name} className="text-(--fp-hi)">
+                                <span key={v} title={VARIANT_INFO[v].name}>
                                   <VariantGlyph variant={v} size={14} />
                                 </span>
                               ))}
@@ -191,14 +199,14 @@ export default function DistrictScreen() {
                           <ProgressFilament value={tt.total ? tt.solved / tt.total : 0} className="mt-3" />
                         </span>
                         <span className="flex flex-col items-end gap-1">
-                          <span className="font-mono text-sm font-semibold tabular-nums">
+                          <span className="font-mono text-sm font-semibold tabular-nums text-(--fp-ink)">
                             {tt.solved}
                             <span className="text-(--fp-muted)">/{tt.total}</span>
                           </span>
-                          {tt.inProgress > 0 && <span className="text-[10px] text-(--fp-muted)">{tt.inProgress} open</span>}
-                          <ChevronRight className="mt-1 size-4 text-(--fp-muted) transition-transform group-hover:translate-x-0.5" aria-hidden />
+                          {tt.inProgress > 0 && <span className="text-[12px] font-medium text-(--fp-muted)">{tt.inProgress} open</span>}
+                          <ChevronRight className="mt-1 size-4 text-(--fp-ink) transition-transform group-hover:translate-x-0.5" aria-hidden />
                         </span>
-                      </Panel>
+                      </span>
                     </button>
                   </motion.li>
                 );
